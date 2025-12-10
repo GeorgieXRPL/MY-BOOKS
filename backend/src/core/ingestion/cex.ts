@@ -1,0 +1,134 @@
+import { LedgerService } from "../ledger";
+import { PricingService } from "./pricing";
+import { JournalLine, NormalizedTxn } from "../types";
+import { newId } from "../../utils/id";
+
+export interface CexTrade {
+  orgId: string;
+  tradeId: string;
+  baseSymbol: string;
+  quoteSymbol: string;
+  side: "buy" | "sell";
+  quantity: number;
+  price: number;
+  fee: number;
+  timestamp: string;
+}
+
+export class CexIngestor {
+  constructor(
+    private store: any,
+    private pricing: PricingService,
+    private ledger: LedgerService
+  ) {}
+
+  private findAccount(orgId: string, nameIncludes: string) {
+    return this.store
+      .listAccounts(orgId)
+      .find((a) => a.name.toLowerCase().includes(nameIncludes.toLowerCase()));
+  }
+
+  private alreadyIngested(id: string) {
+    return this.store.listJournals("demo-org").some((j: any) => j.externalRef === id);
+  }
+
+  async ingest(trades: CexTrade[], actorId: string, period: string) {
+    const results: NormalizedTxn[] = [];
+    for (const t of trades) {
+      if (this.alreadyIngested(t.tradeId)) continue;
+      const asset = this.findAccount(t.orgId, "CEX Balances") ?? this.findAccount(t.orgId, "Crypto Assets");
+      const cash = this.findAccount(t.orgId, "Bank Accounts") ?? this.findAccount(t.orgId, "Cash");
+      const expense = this.findAccount(t.orgId, "Operating Expenses");
+      if (!asset || !cash || !expense) throw new Error("Required accounts not found");
+
+      const notional = t.quantity * t.price;
+      const lines: JournalLine[] = [];
+
+      if (t.side === "buy") {
+        lines.push({
+          id: newId(),
+          accountId: asset.id,
+          debit: notional,
+          credit: 0,
+          currency: t.quoteSymbol,
+          description: `Buy ${t.baseSymbol}`,
+          externalRef: t.tradeId
+        });
+        lines.push({
+          id: newId(),
+          accountId: cash.id,
+          debit: 0,
+          credit: notional,
+          currency: t.quoteSymbol,
+          description: "Pay for purchase",
+          externalRef: t.tradeId
+        });
+      } else {
+        lines.push({
+          id: newId(),
+          accountId: cash.id,
+          debit: notional,
+          credit: 0,
+          currency: t.quoteSymbol,
+          description: `Sell ${t.baseSymbol}`,
+          externalRef: t.tradeId
+        });
+        lines.push({
+          id: newId(),
+          accountId: asset.id,
+          debit: 0,
+          credit: notional,
+          currency: t.quoteSymbol,
+          description: "Reduce asset",
+          externalRef: t.tradeId
+        });
+      }
+
+      if (t.fee > 0) {
+        lines.push({
+          id: newId(),
+          accountId: expense.id,
+          debit: t.fee,
+          credit: 0,
+          currency: t.quoteSymbol,
+          description: "Trading fee",
+          externalRef: t.tradeId
+        });
+        lines.push({
+          id: newId(),
+          accountId: cash.id,
+          debit: 0,
+          credit: t.fee,
+          currency: t.quoteSymbol,
+          description: "Pay fee",
+          externalRef: t.tradeId
+        });
+      }
+
+      this.ledger.createDraft({
+        orgId: t.orgId,
+        period,
+        lines,
+        memo: `CEX trade ${t.tradeId}`,
+        createdBy: actorId,
+        externalRef: t.tradeId
+      });
+
+      const usdValue = await this.pricing.value(t.baseSymbol, t.quantity, "USD");
+      results.push({
+        id: t.tradeId,
+        orgId: t.orgId,
+        amount: t.quantity,
+        currency: t.baseSymbol,
+        direction: t.side === "buy" ? "inflow" : "outflow",
+        description: "CEX trade",
+        occurredAt: t.timestamp,
+        externalRef: t.tradeId,
+        tokenSymbol: t.baseSymbol,
+        usdValue
+      });
+    }
+    return results;
+  }
+}
+

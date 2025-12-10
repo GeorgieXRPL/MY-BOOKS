@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Auth Helper</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 24px;
+        background: #f5f6f8;
+        color: #1f2a3d;
+      }
+      .card {
+        background: #fff;
+        border: 1px solid #d9e1ec;
+        border-radius: 8px;
+        padding: 16px;
+        max-width: 640px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+      }
+      h1 {
+        margin-top: 0;
+      }
+      label {
+        display: block;
+        margin: 8px 0 4px;
+        font-weight: 600;
+      }
+      input[type="text"] {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #cdd6e4;
+        border-radius: 4px;
+      }
+      .roles {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 16px;
+        margin: 8px 0 12px;
+      }
+      button {
+        background: #2563eb;
+        color: #fff;
+        border: none;
+        padding: 10px 14px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      button.secondary {
+        background: #e5e7eb;
+        color: #111827;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      textarea {
+        width: 100%;
+        min-height: 100px;
+        padding: 8px;
+        border: 1px solid #cdd6e4;
+        border-radius: 4px;
+        font-family: monospace;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+      }
+      .status {
+        margin-top: 8px;
+        font-family: monospace;
+        white-space: pre-wrap;
+      }
+      .muted {
+        color: #6b7280;
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Login / Token</h1>
+      <p class="muted">Generates a JWT from the backend and lets you test calls with it.</p>
+
+      <label for="userId">User ID</label>
+      <input id="userId" type="text" value="demo-user" />
+
+      <label>Roles</label>
+      <div class="roles" id="roles">
+        <label><input type="checkbox" value="admin" checked /> admin</label>
+        <label><input type="checkbox" value="poster" checked /> poster</label>
+        <label><input type="checkbox" value="approver" checked /> approver</label>
+        <label><input type="checkbox" value="viewer" checked /> viewer</label>
+        <label><input type="checkbox" value="auditor" /> auditor</label>
+      </div>
+
+      <div class="row">
+        <button id="getToken">Get Token</button>
+        <button id="copyToken" class="secondary" disabled>Copy Token</button>
+      </div>
+
+      <label for="token">JWT</label>
+      <textarea id="token" readonly placeholder="Click Get Token above"></textarea>
+
+      <div class="row">
+        <button id="testHealth" class="secondary" disabled>Test /health</button>
+        <button id="testBS" class="secondary" disabled>Test Balance Sheet</button>
+      </div>
+
+      <div class="status" id="status"></div>
+    </div>
+
+    <script>
+      const byId = (id) => document.getElementById(id);
+      const userIdInput = byId("userId");
+      const tokenArea = byId("token");
+      const statusEl = byId("status");
+      const getTokenBtn = byId("getToken");
+      const copyBtn = byId("copyToken");
+      const testHealthBtn = byId("testHealth");
+      const testBSBtn = byId("testBS");
+
+      const getRoles = () => {
+        return Array.from(document.querySelectorAll("#roles input:checked")).map((c) => c.value);
+      };
+
+      const setStatus = (msg) => {
+        statusEl.textContent = msg;
+      };
+
+      const setTokenState = (token) => {
+        tokenArea.value = token || "";
+        const enabled = Boolean(token);
+        copyBtn.disabled = !enabled;
+        testHealthBtn.disabled = !enabled;
+        testBSBtn.disabled = !enabled;
+      };
+
+      getTokenBtn.addEventListener("click", async () => {
+        const userId = userIdInput.value.trim() || "demo-user";
+        const roles = getRoles();
+        setStatus("Requesting token...");
+        try {
+          const res = await fetch("/security/auth/token", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId, roles })
+          });
+          if (!res.ok) {
+            const text = await res.text();
+            throw new Error(text || res.statusText);
+          }
+          const data = await res.json();
+          setTokenState(data.token);
+          setStatus("Token received. Use it in the Authorization header.");
+        } catch (err) {
+          setStatus(`Error: ${err.message}`);
+          setTokenState("");
+        }
+      });
+
+      copyBtn.addEventListener("click", async () => {
+        const token = tokenArea.value;
+        if (!token) return;
+        await navigator.clipboard.writeText(token);
+        setStatus("Token copied to clipboard.");
+      });
+
+      const authFetch = async (url) => {
+        const token = tokenArea.value;
+        if (!token) {
+          setStatus("Get a token first.");
+          return;
+        }
+        setStatus(`Calling ${url} ...`);
+        try {
+          const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+          const body = await res.text();
+          setStatus(`${res.status}: ${body}`);
+        } catch (err) {
+          setStatus(`Error: ${err.message}`);
+        }
+      };
+
+      testHealthBtn.addEventListener("click", () => authFetch("/health"));
+      testBSBtn.addEventListener("click", () => authFetch("/reports/balance-sheet?orgId=demo-org"));
+    </script>
+  </body>
+</html>
+
+
+

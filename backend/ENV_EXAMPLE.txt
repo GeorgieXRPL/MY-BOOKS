@@ -1,0 +1,9 @@
+# Copy to .env and customize secrets
+PORT=4000
+JWT_SECRET=change-me
+WEBHOOK_SECRET=change-me-webhook
+PRICE_PROVIDER=coingecko
+DEFAULT_CURRENCY=USD
+
+
+
