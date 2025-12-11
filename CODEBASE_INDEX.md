@@ -4,6 +4,24 @@
 
 **MY-BOOKS** is a full-featured accounting system with crypto/fiat support, designed for in-house use with potential for SaaS monetization. Built with Node.js/Express backend and React/Vite frontend.
 
+**Repository**: https://github.com/GeorgieXRPL/MY-BOOKS
+
+---
+
+## Quick Start (Production)
+
+### Live URLs
+| Service | URL |
+|---------|-----|
+| **Backend API** | https://my-books-wy9w.onrender.com |
+| **Frontend** | *(Add your Vercel URL)* |
+
+### First Login
+1. Open the frontend URL
+2. Click **"Sign up"** and create an account
+3. Make yourself admin (see "Make Yourself Admin" section below)
+4. Login and start using the app
+
 ---
 
 ## Backend (`backend/`)
@@ -217,12 +235,14 @@ npm run dev
 ```
 
 ### First Time Setup
-1. Open http://localhost:5173
-2. Click "Sign up" to create your account
+1. Open the frontend (localhost:5173 or your Vercel URL)
+2. Click **"Sign up"** to create your account
 3. Make yourself admin (see below)
-4. Invite team members from Team page
+4. Login and invite team members from the Team page
 
-**Make yourself admin:**
+### Make Yourself Admin
+
+**Local Development:**
 ```bash
 cd backend
 node -e "
@@ -232,6 +252,13 @@ db.prepare('UPDATE users SET roles = ? WHERE email = ?')
   .run('[\"admin\"]', 'your@email.com');
 console.log('Done! You are now admin.');
 "
+```
+
+**Production (Render Shell):**
+1. Go to Render → Your service → Shell tab
+2. Run:
+```bash
+node -e "const db = require('better-sqlite3')('data.db'); db.prepare(\"UPDATE users SET roles = '[\\\"admin\\\"]' WHERE email = 'your@email.com'\").run(); console.log('Done!');"
 ```
 
 ---
@@ -271,14 +298,38 @@ console.log('Done! You are now admin.');
 
 ## Deployment
 
-### Live URLs
-- **Backend API**: https://my-books-wy9w.onrender.com
-- **Frontend**: *(Vercel URL here)*
+### Current Production Setup
+| Component | Host | URL |
+|-----------|------|-----|
+| Backend API | Render | https://my-books-wy9w.onrender.com |
+| Frontend | Vercel | *(Add your Vercel URL)* |
+| Database | SQLite on Render | Persistent volume |
+
+### Environment Variables
+
+**Backend (Render):**
+```
+NODE_ENV=production
+JWT_SECRET=<64+ char random string>
+WEBHOOK_SECRET=<32+ char random string>
+DEFAULT_CURRENCY=USD
+PORT=10000
+```
+
+**Frontend (Vercel):**
+```
+VITE_API_BASE_URL=https://my-books-wy9w.onrender.com
+```
+
+### Test Backend Health
+```bash
+curl https://my-books-wy9w.onrender.com/health
+# Returns: {"ok":true}
+```
 
 See `DEPLOYMENT.md` for:
 - VPS deployment (DigitalOcean, Linode)
 - Docker Compose setup
-- Vercel/Railway/Render options
 - Security checklist
 - Backup strategies
 - Monetization setup (Stripe integration)
