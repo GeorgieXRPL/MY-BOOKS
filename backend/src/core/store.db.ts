@@ -419,7 +419,8 @@ export class DbStore {
     this.db = new Database(filename);
     this.db.exec(ddl);
     // Seed COA if empty
-    const count = this.db.prepare("SELECT COUNT(*) as c FROM accounts WHERE orgId = ?").get(seedOrgId).c as number;
+    const countRow = this.db.prepare("SELECT COUNT(*) as c FROM accounts WHERE orgId = ?").get(seedOrgId) as { c: number };
+    const count = countRow?.c ?? 0;
     if (count === 0) {
       const ins = this.db.prepare(
         "INSERT INTO accounts (id, orgId, code, name, type, currency, isActive) VALUES (@id,@orgId,@code,@name,@type,@currency,@isActive)"
@@ -449,7 +450,7 @@ export class DbStore {
   }
 
   listAccounts(orgId: string) {
-    const rows = this.db.prepare("SELECT * FROM accounts WHERE orgId = ?").all(orgId);
+    const rows = this.db.prepare("SELECT * FROM accounts WHERE orgId = ?").all(orgId) as any[];
     return rows.map((r) => ({
       ...r,
       tags: r.tags ? JSON.parse(r.tags) : undefined,
@@ -492,9 +493,9 @@ export class DbStore {
   }
 
   getJournal(id: string) {
-    const row = this.db.prepare("SELECT * FROM journals WHERE id = ?").get(id);
+    const row = this.db.prepare("SELECT * FROM journals WHERE id = ?").get(id) as any;
     if (!row) return undefined;
-    const lines = this.db.prepare("SELECT * FROM journal_lines WHERE journalId = ?").all(id);
+    const lines = this.db.prepare("SELECT * FROM journal_lines WHERE journalId = ?").all(id) as any[];
     return {
       ...row,
       tags: row.tags ? JSON.parse(row.tags) : undefined,
@@ -511,9 +512,9 @@ export class DbStore {
   }
 
   listJournals(orgId: string) {
-    const rows = this.db.prepare("SELECT * FROM journals WHERE orgId = ?").all(orgId);
+    const rows = this.db.prepare("SELECT * FROM journals WHERE orgId = ?").all(orgId) as any[];
     return rows.map((r) => {
-      const lines = this.db.prepare("SELECT * FROM journal_lines WHERE journalId = ?").all(r.id);
+      const lines = this.db.prepare("SELECT * FROM journal_lines WHERE journalId = ?").all(r.id) as any[];
       return { ...r, tags: r.tags ? JSON.parse(r.tags) : undefined, lines } as JournalEntry;
     });
   }
@@ -569,7 +570,7 @@ export class DbStore {
   }
 
   listAudit(orgId: string) {
-    const rows = this.db.prepare("SELECT * FROM audit_logs WHERE orgId = ? ORDER BY timestamp DESC").all(orgId);
+    const rows = this.db.prepare("SELECT * FROM audit_logs WHERE orgId = ? ORDER BY timestamp DESC").all(orgId) as any[];
     return rows.map((r) => ({
       ...r,
       before: r.before ? JSON.parse(r.before) : undefined,
@@ -592,7 +593,7 @@ export class DbStore {
   }
 
   getUserRoles(userId: string) {
-    const row = this.db.prepare("SELECT roles FROM roles WHERE userId = ?").get(userId);
+    const row = this.db.prepare("SELECT roles FROM roles WHERE userId = ?").get(userId) as { roles: string } | undefined;
     if (!row) return [];
     try {
       return JSON.parse(row.roles) as Role[];
