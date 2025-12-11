@@ -227,3 +227,5 @@ const BankTxnsPage = () => {
 
 export default BankTxnsPage;
 
+
+

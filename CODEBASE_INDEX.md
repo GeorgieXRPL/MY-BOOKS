@@ -271,6 +271,10 @@ console.log('Done! You are now admin.');
 
 ## Deployment
 
+### Live URLs
+- **Backend API**: https://my-books-production.up.railway.app
+- **Frontend**: *(Vercel URL here)*
+
 See `DEPLOYMENT.md` for:
 - VPS deployment (DigitalOcean, Linode)
 - Docker Compose setup

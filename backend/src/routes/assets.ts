@@ -95,3 +95,5 @@ export const buildAssetsRouter = (depreciation: DepreciationService) => {
   return router;
 };
 
+
+
