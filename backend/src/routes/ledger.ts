@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
-import { LedgerService } from "../core/ledger";
+import { LedgerService, DraftInput } from "../core/ledger";
 import { requireRoles } from "../middleware/auth";
+import { newId } from "../utils/id";
 
 export const buildLedgerRouter = (ledger: LedgerService, store: any) => {
   const router = Router();
@@ -33,7 +34,7 @@ export const buildLedgerRouter = (ledger: LedgerService, store: any) => {
     const parsed = journalSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json(parsed.error);
     try {
-      const journal = ledger.createDraft(parsed.data);
+      const journal = ledger.createDraft(parsed.data as DraftInput);
       return res.json(journal);
     } catch (err: any) {
       return res.status(400).json({ error: err.message });
@@ -83,7 +84,6 @@ export const buildLedgerRouter = (ledger: LedgerService, store: any) => {
 
   router.post("/accounts", requireRoles(["admin"]), (req, res) => {
     try {
-      const { newId } = require("../utils/id");
       const account = store.upsertAccount({
         id: newId(),
         orgId: req.body.orgId || "demo-org",

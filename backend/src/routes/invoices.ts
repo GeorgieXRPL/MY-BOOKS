@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { InvoiceService } from "../core/invoices";
 import { DbStore } from "../core/store.db";
+import { newId } from "../utils/id";
 
 export const buildInvoicesRouter = (invoices: InvoiceService, store: DbStore) => {
   const router = Router();
@@ -93,7 +94,7 @@ export const buildInvoicesRouter = (invoices: InvoiceService, store: DbStore) =>
     try {
       const cp = store.addCounterparty({
         ...req.body,
-        id: require("../utils/id").newId(),
+        id: newId(),
         createdAt: new Date().toISOString()
       });
       res.status(201).json(cp);

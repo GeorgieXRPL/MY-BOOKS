@@ -2,10 +2,23 @@ import { AuditLogService } from "./security/auditLog";
 import { JournalEntry, JournalLine, JournalStatus } from "./types";
 import { newId } from "../utils/id";
 
-interface DraftInput {
+interface DraftLineInput {
+  accountId: string;
+  debit: number;
+  credit: number;
+  currency: string;
+  description?: string;
+  walletId?: string;
+  tokenSymbol?: string;
+  fxRate?: number;
+  externalRef?: string;
+  txHash?: string;
+}
+
+export interface DraftInput {
   orgId: string;
   period: string; // YYYY-MM
-  lines: JournalLine[];
+  lines: DraftLineInput[] | JournalLine[];
   memo?: string;
   tags?: string[];
   createdBy: string;
@@ -27,14 +40,20 @@ export class LedgerService {
   }
 
   createDraft(input: DraftInput) {
-    this.validateLines(input.lines);
+    // Ensure all lines have IDs
+    const linesWithIds: JournalLine[] = input.lines.map(line => ({
+      ...line,
+      id: (line as any).id || newId()
+    }));
+    this.validateLines(linesWithIds);
     const now = new Date().toISOString();
     const journal: JournalEntry = {
       id: newId(),
       status: "draft",
       createdAt: now,
       updatedAt: now,
-      ...input
+      ...input,
+      lines: linesWithIds
     };
     this.store.addJournal(journal);
     this.audit.record({
@@ -43,9 +62,14 @@ export class LedgerService {
       action: "journal.create",
       entity: "journal",
       entityId: journal.id,
-      after: journal
+      after: journal as unknown as Record<string, unknown>
     });
     return journal;
+  }
+
+  // Alias for createDraft - used by payroll/depreciation modules
+  draft(input: DraftInput) {
+    return this.createDraft(input);
   }
 
   review(id: string, reviewerId: string) {

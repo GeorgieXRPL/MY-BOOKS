@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
-import { WalletIngestor } from "../core/ingestion/wallet";
-import { CexIngestor } from "../core/ingestion/cex";
-import { BankIngestor } from "../core/ingestion/bank";
+import { WalletIngestor, WalletTransfer } from "../core/ingestion/wallet";
+import { CexIngestor, CexTrade } from "../core/ingestion/cex";
+import { BankIngestor, BankTxn } from "../core/ingestion/bank";
 import { requireRoles } from "../middleware/auth";
 import { verifyWebhookSignature } from "../middleware/hmac";
 
@@ -39,7 +39,7 @@ export const buildIngestionRouter = (
       const parsed = walletSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json(parsed.error);
       try {
-        const data = await wallet.ingest(parsed.data.transfers, parsed.data.actorId, parsed.data.period);
+        const data = await wallet.ingest(parsed.data.transfers as WalletTransfer[], parsed.data.actorId, parsed.data.period);
         return res.json({ ingested: data.length });
       } catch (err: any) {
         return res.status(400).json({ error: err.message });
@@ -69,7 +69,7 @@ export const buildIngestionRouter = (
     const parsed = cexSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json(parsed.error);
     try {
-      const data = await cex.ingest(parsed.data.trades, parsed.data.actorId, parsed.data.period);
+      const data = await cex.ingest(parsed.data.trades as CexTrade[], parsed.data.actorId, parsed.data.period);
       return res.json({ ingested: data.length });
     } catch (err: any) {
       return res.status(400).json({ error: err.message });
@@ -95,7 +95,7 @@ export const buildIngestionRouter = (
     const parsed = bankSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json(parsed.error);
     try {
-      const data = bank.ingest(parsed.data.txns, parsed.data.actorId, parsed.data.period);
+      const data = bank.ingest(parsed.data.txns as BankTxn[], parsed.data.actorId, parsed.data.period);
       return res.json({ ingested: data.length });
     } catch (err: any) {
       return res.status(400).json({ error: err.message });
