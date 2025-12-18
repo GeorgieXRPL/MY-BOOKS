@@ -26,7 +26,8 @@ const JournalsPage = () => {
   const [debitAcct, setDebitAcct] = useState("");
   const [creditAcct, setCreditAcct] = useState("");
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const { roles } = useAuthStore();
+  const { user } = useAuthStore();
+  const roles = user?.roles ?? [];
 
   const fetchJournals = async () => {
     try {
