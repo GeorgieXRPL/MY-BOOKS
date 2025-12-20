@@ -119,6 +119,28 @@ This is a **full-stack accounting and financial reporting application** designed
 
 **Supported Formats:** JPG, PNG, WebP (max 10MB)
 
+### Admin Module (`/admin`)
+
+| Service            | File              | Description                                    |
+|--------------------|-------------------|------------------------------------------------|
+| **Admin Routes**   | `routes.ts`       | Protected admin-only API endpoints             |
+| **Metrics**        | `metrics.ts`      | Request tracking and system health metrics     |
+| **Impersonation**  | `impersonate.ts`  | Admin user impersonation for debugging         |
+| **Middleware**     | `middleware.ts`   | Request metrics collection middleware          |
+
+**API Endpoints:**
+- `GET /admin/health` - System health information
+- `GET /admin/metrics` - Detailed request/error metrics
+- `GET /admin/users` - List all users
+- `PATCH /admin/users/:id` - Update user (roles, active status)
+- `POST /admin/impersonate` - Start impersonation session
+- `GET /admin/audit/search` - Search audit logs
+- `GET /admin/feature-flags` - List feature flags
+- `PATCH /admin/feature-flags/:flag` - Toggle feature flag
+- `GET /admin/db/stats` - Database statistics
+
+**Security:** Admin routes require "admin" role and optionally IP allowlist (via `ADMIN_IP_ALLOWLIST` env var)
+
 ### Calculation Services (`/core/calculations`)
 
 | Service                | File              | Description                              |

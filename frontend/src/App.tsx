@@ -14,6 +14,7 @@ import CalculationsPage from "./pages/CalculationsPage";
 import DashboardPage from "./pages/DashboardPage";
 import SettingsPage from "./pages/SettingsPage";
 import TeamPage from "./pages/TeamPage";
+import AdminDashboard from "./pages/admin/AdminDashboard";
 import { useAuthStore } from "./store/auth";
 import { useEffect, useState } from "react";
 
@@ -120,9 +121,14 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               {collapsed ? "⬇️" : "⬇️ Ingestion"}
             </NavLink>
             {isAdmin && (
-              <NavLink to="/team" className={({ isActive }) => (isActive ? "active" : "")}>
-                {collapsed ? "👥" : "👥 Team"}
-              </NavLink>
+              <>
+                <NavLink to="/team" className={({ isActive }) => (isActive ? "active" : "")}>
+                  {collapsed ? "👥" : "👥 Team"}
+                </NavLink>
+                <NavLink to="/admin" className={({ isActive }) => (isActive ? "active" : "")}>
+                  {collapsed ? "🔧" : "🔧 Admin"}
+                </NavLink>
+              </>
             )}
             <NavLink to="/settings" className={({ isActive }) => (isActive ? "active" : "")}>
               {collapsed ? "⚙️" : "⚙️ Settings"}
@@ -158,6 +164,7 @@ const App = () => {
         <Route path="/ingestion" element={<IngestionPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/team" element={<TeamPage />} />
+        <Route path="/admin" element={<AdminDashboard />} />
         <Route path="*" element={<DashboardPage />} />
       </Routes>
     </Layout>

@@ -40,6 +40,7 @@ import { FormulaService } from "./core/calculations/formulas";
 import { FXService } from "./core/calculations/fx";
 import { AutoIngestService } from "./core/blockchain";
 import { OCRService } from "./core/ocr";
+import { buildAdminRouter, metricsMiddleware } from "./admin";
 
 // New routes
 import { buildInvoicesRouter } from "./routes/invoices";
@@ -59,6 +60,7 @@ export const buildApp = async () => {
   const app = express();
   app.use(cors());
   app.use(express.json({ limit: "2mb" }));
+  app.use(metricsMiddleware);
 
   // Use 'any' type for store to support both SQLite and PostgreSQL
   // Both stores implement the same interface but have different implementations
@@ -136,6 +138,9 @@ export const buildApp = async () => {
   app.use("/crypto", buildCryptoRouter(crypto));
   app.use("/assets", buildAssetsRouter(depreciation));
   app.use("/calc", buildCalculationsRouter(tax, ratios, formulas, fx));
+  
+  // Admin routes (protected by admin role)
+  app.use("/admin", buildAdminRouter(store));
 
   app.get("/recon/sample", requireRoles(["viewer", "admin"]), (_req, res) => {
     const items = recon.list(DEFAULT_ORG);
