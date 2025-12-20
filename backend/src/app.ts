@@ -38,6 +38,7 @@ import { DepreciationService } from "./core/calculations/depreciation";
 import { RatioService } from "./core/calculations/ratios";
 import { FormulaService } from "./core/calculations/formulas";
 import { FXService } from "./core/calculations/fx";
+import { AutoIngestService } from "./core/blockchain";
 
 // New routes
 import { buildInvoicesRouter } from "./routes/invoices";
@@ -101,6 +102,9 @@ export const buildApp = async () => {
   const ratios = new RatioService(store, reporting);
   const formulas = new FormulaService(store, reporting);
   const fx = new FXService(store, config.defaultCurrency);
+  
+  // Blockchain auto-ingestion service
+  const autoIngest = new AutoIngestService(store, pricing, ledger);
 
   // Static UI (login/token helper) served before auth
   const publicDir = path.join(process.cwd(), "public");
@@ -116,7 +120,7 @@ export const buildApp = async () => {
 
   // Existing routes
   app.use("/ledger", buildLedgerRouter(ledger, store));
-  app.use("/ingest", buildIngestionRouter(wallet, cex, bankIngest));
+  app.use("/ingest", buildIngestionRouter(wallet, cex, bankIngest, autoIngest));
   app.use("/reports", buildReportingRouter(reporting, recon));
   app.use("/close", buildCloseRouter(close));
 

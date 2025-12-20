@@ -88,6 +88,22 @@ This is a **full-stack accounting and financial reporting application** designed
 | **CexIngestor**    | `cex.ts`      | CEX (Coinbase, Binance, etc.) data import    |
 | **BankIngestor**   | `bank.ts`     | Bank statement CSV/API import                |
 
+### Blockchain Auto-Ingestion (`/core/blockchain`)
+
+| Service              | File              | Description                                    |
+|----------------------|-------------------|------------------------------------------------|
+| **AutoIngestService**| `autoIngest.ts`   | Orchestrates TX lookup, pricing, journal creation |
+| **Chain Detector**   | `detector.ts`     | Auto-detect blockchain from TX hash format     |
+| **EVM Fetcher**      | `fetchers/evm.ts` | Ethereum, Polygon, Arbitrum, Base via Alchemy  |
+| **XRPL Fetcher**     | `fetchers/xrpl.ts`| XRP Ledger transaction fetching                |
+| **Solana Fetcher**   | `fetchers/solana.ts` | Solana via Helius or public RPC             |
+| **Bitcoin Fetcher**  | `fetchers/bitcoin.ts` | Bitcoin via Blockstream/Mempool.space       |
+
+**API Endpoints:**
+- `POST /ingest/blockchain/lookup` - Preview transaction details
+- `POST /ingest/blockchain/detect` - Detect chain from hash format
+- `POST /ingest/blockchain/ingest` - Fetch TX and create journal entry
+
 ### Calculation Services (`/core/calculations`)
 
 | Service                | File              | Description                              |
