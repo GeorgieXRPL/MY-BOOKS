@@ -165,6 +165,26 @@ This is a **full-stack accounting and financial reporting application** designed
 
 **Frontend:** Floating chat widget accessible on all pages (bottom-right corner)
 
+### Security Middleware (`/middleware/security.ts`)
+
+| Middleware         | Description                                         |
+|--------------------|-----------------------------------------------------|
+| **Helmet**         | Security headers (CSP, HSTS, XSS protection)        |
+| **Rate Limiting**  | General (100/15min), Auth (10/hour), Upload (20/hour) |
+| **CORS**           | Origin allowlist via `ALLOWED_ORIGINS` env var      |
+| **API Key Auth**   | Programmatic access via `X-API-Key` header          |
+| **Request Sanitization** | Remove dangerous characters from inputs       |
+| **Error Sanitization** | Don't leak stack traces in production           |
+
+**Security Features:**
+- Helmet.js for security headers
+- Rate limiting on all endpoints
+- Stricter rate limiting on auth endpoints
+- CORS with origin allowlist
+- API key authentication for programmatic access
+- Input sanitization
+- Request ID tracking
+
 ### Calculation Services (`/core/calculations`)
 
 | Service                | File              | Description                              |

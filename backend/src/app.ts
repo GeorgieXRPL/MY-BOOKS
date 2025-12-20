@@ -1,5 +1,4 @@
 import express from "express";
-import cors from "cors";
 import { config } from "./config";
 import { logger } from "./utils/logger";
 import { buildLedgerRouter } from "./routes/ledger";
@@ -41,6 +40,13 @@ import { FXService } from "./core/calculations/fx";
 import { AutoIngestService } from "./core/blockchain";
 import { OCRService } from "./core/ocr";
 import { buildAdminRouter, metricsMiddleware } from "./admin";
+import { 
+  securityMiddleware, 
+  corsMiddleware, 
+  authRateLimit, 
+  uploadRateLimit,
+  errorSanitization 
+} from "./middleware/security";
 import { ChatService } from "./core/ai";
 import { buildChatRouter } from "./routes/chat";
 
@@ -60,7 +66,11 @@ const usePostgres = !!process.env.DATABASE_URL;
 
 export const buildApp = async () => {
   const app = express();
-  app.use(cors());
+  
+  // Security middleware (Helmet, rate limiting, sanitization)
+  app.use(corsMiddleware);
+  securityMiddleware.forEach(mw => app.use(mw));
+  
   app.use(express.json({ limit: "2mb" }));
   app.use(metricsMiddleware);
 
@@ -154,6 +164,9 @@ export const buildApp = async () => {
     const items = recon.list(DEFAULT_ORG);
     res.json(items);
   });
+
+  // Error sanitization (must be last)
+  app.use(errorSanitization);
 
   logger.info(`App wired with ${usePostgres ? "PostgreSQL" : "SQLite"} store and all modules`);
   return app;

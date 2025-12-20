@@ -6,6 +6,7 @@ import { MfaService } from "../core/security/mfa";
 import { AuditLogService } from "../core/security/auditLog";
 import { ControlsService } from "../core/controls";
 import { requireRoles, AuthenticatedRequest } from "../middleware/auth";
+import { authRateLimit } from "../middleware/security";
 import { Role } from "../core/types";
 
 const registerSchema = z.object({
@@ -34,6 +35,8 @@ export const buildSecurityRouter = (
   const router = Router();
 
   // ============ PUBLIC AUTH ROUTES ============
+  // Apply stricter rate limiting to auth endpoints
+  router.use("/auth", authRateLimit);
 
   // Register a new user
   router.post("/auth/register", async (req, res) => {
