@@ -15,6 +15,7 @@ import DashboardPage from "./pages/DashboardPage";
 import SettingsPage from "./pages/SettingsPage";
 import TeamPage from "./pages/TeamPage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
+import ChatWidget from "./components/ChatWidget";
 import { useAuthStore } from "./store/auth";
 import { useEffect, useState } from "react";
 
@@ -141,6 +142,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
         </nav>
       </aside>
       <main className="content">{children}</main>
+      <ChatWidget />
     </div>
   );
 };

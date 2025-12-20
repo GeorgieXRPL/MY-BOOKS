@@ -141,6 +141,30 @@ This is a **full-stack accounting and financial reporting application** designed
 
 **Security:** Admin routes require "admin" role and optionally IP allowlist (via `ADMIN_IP_ALLOWLIST` env var)
 
+### AI Chatbot (`/core/ai`)
+
+| Service            | File           | Description                                    |
+|--------------------|----------------|------------------------------------------------|
+| **ChatService**    | `chat.ts`      | Main chat completion with OpenAI GPT-4         |
+| **FunctionExecutor** | `executor.ts`| Executes function calls from AI               |
+| **Functions**      | `functions.ts` | Available function definitions                 |
+
+**API Endpoints:**
+- `GET /chat/status` - Check if chatbot is configured
+- `POST /chat/message` - Send a chat message
+- `GET /chat/prompts` - Get suggested prompts
+
+**Capabilities:**
+- Query account balances and transactions
+- List and analyze invoices
+- Get financial summaries
+- Explain transactions and reports
+- Calculate financial ratios
+- Suggest account mappings
+- Query crypto holdings
+
+**Frontend:** Floating chat widget accessible on all pages (bottom-right corner)
+
 ### Calculation Services (`/core/calculations`)
 
 | Service                | File              | Description                              |

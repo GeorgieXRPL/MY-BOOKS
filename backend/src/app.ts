@@ -41,6 +41,8 @@ import { FXService } from "./core/calculations/fx";
 import { AutoIngestService } from "./core/blockchain";
 import { OCRService } from "./core/ocr";
 import { buildAdminRouter, metricsMiddleware } from "./admin";
+import { ChatService } from "./core/ai";
+import { buildChatRouter } from "./routes/chat";
 
 // New routes
 import { buildInvoicesRouter } from "./routes/invoices";
@@ -111,6 +113,9 @@ export const buildApp = async () => {
   
   // OCR service for invoice scanning
   const ocr = new OCRService(invoices);
+  
+  // AI chatbot service
+  const chat = new ChatService(store, { ledger, reporting, invoices, crypto, ratios });
 
   // Static UI (login/token helper) served before auth
   const publicDir = path.join(process.cwd(), "public");
@@ -141,6 +146,9 @@ export const buildApp = async () => {
   
   // Admin routes (protected by admin role)
   app.use("/admin", buildAdminRouter(store));
+  
+  // AI chatbot route
+  app.use("/chat", buildChatRouter(chat));
 
   app.get("/recon/sample", requireRoles(["viewer", "admin"]), (_req, res) => {
     const items = recon.list(DEFAULT_ORG);
