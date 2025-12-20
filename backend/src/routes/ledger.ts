@@ -3,6 +3,7 @@ import { z } from "zod";
 import { LedgerService, DraftInput } from "../core/ledger";
 import { requireRoles } from "../middleware/auth";
 import { newId } from "../utils/id";
+import { parsePagination, paginateArray } from "../utils/pagination";
 
 export const buildLedgerRouter = (ledger: LedgerService, store: any) => {
   const router = Router();
@@ -72,9 +73,16 @@ export const buildLedgerRouter = (ledger: LedgerService, store: any) => {
     }
   });
 
-  router.get("/journals", requireRoles(["viewer", "admin", "approver", "poster"]), (_req, res) => {
-    const data = ledger.list("demo-org");
-    res.json(data);
+  router.get("/journals", requireRoles(["viewer", "admin", "approver", "poster"]), (req, res) => {
+    const orgId = (req.query.orgId as string) || "demo-org";
+    const pagination = parsePagination(req, 50, 200);
+    
+    // Get all journals (in production, this would be a paginated DB query)
+    const allJournals = ledger.list(orgId);
+    
+    // Apply pagination
+    const result = paginateArray(allJournals, pagination);
+    res.json(result);
   });
 
   router.get("/accounts", requireRoles(["viewer", "admin", "approver", "poster"]), (req, res) => {

@@ -185,6 +185,27 @@ This is a **full-stack accounting and financial reporting application** designed
 - Input sanitization
 - Request ID tracking
 
+### Scalability (`/utils`)
+
+| Utility            | File             | Description                                    |
+|--------------------|------------------|------------------------------------------------|
+| **Cache**          | `cache.ts`       | Redis caching with in-memory fallback          |
+| **Pagination**     | `pagination.ts`  | Standard and cursor-based pagination           |
+
+**Caching:**
+- Redis/Upstash for distributed caching
+- In-memory fallback when Redis unavailable
+- 5-minute TTL for financial reports
+- Cache invalidation on data changes
+
+**Pagination:**
+- Standard offset-based: `?page=1&limit=20`
+- Cursor-based for large datasets: `?cursor=xxx&limit=20`
+- Default 20 items, max 200 per page
+
+**Environment Variables:**
+- `UPSTASH_REDIS_URL` or `REDIS_URL` for Redis connection
+
 ### Calculation Services (`/core/calculations`)
 
 | Service                | File              | Description                              |
