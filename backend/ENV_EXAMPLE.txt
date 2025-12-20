@@ -1,11 +1,40 @@
 # Copy to .env and customize secrets
+
+# Server
 PORT=4000
-JWT_SECRET=change-me
+NODE_ENV=development
+
+# Security - CHANGE THESE IN PRODUCTION!
+JWT_SECRET=change-me-to-a-64-character-random-string
 WEBHOOK_SECRET=change-me-webhook
+
+# Database - Use DATABASE_URL for PostgreSQL, or leave blank for SQLite
+# SQLite (default for development):
+# (leave DATABASE_URL unset to use SQLite)
+
+# PostgreSQL (Supabase):
+# DATABASE_URL=postgresql://postgres:[password]@db.[project].supabase.co:5432/postgres
+
+# Pricing
 PRICE_PROVIDER=coingecko
 DEFAULT_CURRENCY=USD
 
+# Blockchain APIs (for Phase 2)
+# ALCHEMY_API_KEY=your-alchemy-key
+# HELIUS_API_KEY=your-helius-key
 
+# File Storage - Cloudflare R2 (for Phase 3)
+# R2_ACCOUNT_ID=xxx
+# R2_ACCESS_KEY_ID=xxx
+# R2_SECRET_ACCESS_KEY=xxx
+# R2_BUCKET_NAME=reporting-uploads
 
+# Redis - Upstash (for Phase 7)
+# UPSTASH_REDIS_URL=https://xxx.upstash.io
+# UPSTASH_REDIS_TOKEN=xxx
 
+# AI - OpenAI (for Phase 3 & 5)
+# OPENAI_API_KEY=sk-xxx
 
+# CORS - Allowed frontend origins (comma-separated)
+# ALLOWED_ORIGINS=https://your-app.vercel.app,http://localhost:5173

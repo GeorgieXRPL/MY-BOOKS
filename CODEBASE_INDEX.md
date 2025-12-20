@@ -14,7 +14,8 @@ This is a **full-stack accounting and financial reporting application** designed
 | State     | Zustand                                      |
 | API       | Axios (with token refresh interceptors)      |
 | Backend   | Node.js, Express, TypeScript                 |
-| Database  | SQLite (via better-sqlite3)                  |
+| Database  | **PostgreSQL** (Supabase) or SQLite (dev)    |
+| ORM       | Drizzle ORM (for PostgreSQL)                 |
 | Auth      | JWT (access + refresh tokens), bcryptjs      |
 | Security  | RBAC, MFA (TOTP), HMAC webhooks, Audit logs  |
 
@@ -29,6 +30,7 @@ This is a **full-stack accounting and financial reporting application** designed
 │   │   ├── server.ts           # HTTP server entry point
 │   │   ├── config.ts           # Environment configuration
 │   │   ├── core/               # Business logic services
+│   │   ├── db/                 # Database layer (PostgreSQL/Drizzle)
 │   │   ├── middleware/         # Express middleware
 │   │   ├── routes/             # API route handlers
 │   │   └── utils/              # Utility functions
@@ -106,10 +108,16 @@ This is a **full-stack accounting and financial reporting application** designed
 
 ### Data Store
 
-| File           | Description                                     |
-|----------------|-------------------------------------------------|
-| `store.ts`     | In-memory store (for development/testing)       |
-| `store.db.ts`  | SQLite-backed persistent store (production)     |
+| File                | Description                                     |
+|---------------------|-------------------------------------------------|
+| `core/store.ts`     | In-memory store (for development/testing)       |
+| `core/store.db.ts`  | SQLite-backed persistent store                  |
+| `db/store.pg.ts`    | **PostgreSQL store (production/Supabase)**      |
+| `db/schema.ts`      | Drizzle ORM schema definitions                  |
+| `db/client.ts`      | PostgreSQL connection pool                      |
+| `db/migrate.ts`     | Database migration runner                       |
+
+**Database Selection:** The app automatically uses PostgreSQL if `DATABASE_URL` is set, otherwise falls back to SQLite.
 
 ### Middleware (`/middleware`)
 

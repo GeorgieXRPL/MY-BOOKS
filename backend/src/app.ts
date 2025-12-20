@@ -7,6 +7,8 @@ import { buildIngestionRouter } from "./routes/ingestion";
 import { buildReportingRouter } from "./routes/reporting";
 import { buildSecurityRouter } from "./routes/security";
 import { DbStore } from "./core/store.db";
+import { PgStore } from "./db/store.pg";
+import { runMigrations } from "./db/migrate";
 import { AuditLogService } from "./core/security/auditLog";
 import { RbacService } from "./core/security/rbac";
 import { MfaService } from "./core/security/mfa";
@@ -48,12 +50,30 @@ import { buildCalculationsRouter } from "./routes/calculations";
 
 const DEFAULT_ORG = "demo-org";
 
-export const buildApp = () => {
+// Determine which database to use
+const usePostgres = !!process.env.DATABASE_URL;
+
+export const buildApp = async () => {
   const app = express();
   app.use(cors());
   app.use(express.json({ limit: "2mb" }));
 
-  const store = new DbStore("data.db", DEFAULT_ORG, config.defaultCurrency);
+  // Use 'any' type for store to support both SQLite and PostgreSQL
+  // Both stores implement the same interface but have different implementations
+  let store: any;
+
+  if (usePostgres) {
+    logger.info("Using PostgreSQL database");
+    // Run migrations first
+    await runMigrations();
+    // Create PostgreSQL store
+    const pgStore = new PgStore(process.env.DATABASE_URL!, DEFAULT_ORG, config.defaultCurrency);
+    await pgStore.initialize();
+    store = pgStore;
+  } else {
+    logger.info("Using SQLite database");
+    store = new DbStore("data.db", DEFAULT_ORG, config.defaultCurrency);
+  }
 
   // Core services
   const audit = new AuditLogService(store);
@@ -114,6 +134,6 @@ export const buildApp = () => {
     res.json(items);
   });
 
-  logger.info("App wired with SQLite store and all modules");
+  logger.info(`App wired with ${usePostgres ? "PostgreSQL" : "SQLite"} store and all modules`);
   return app;
 };
