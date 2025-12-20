@@ -104,6 +104,21 @@ This is a **full-stack accounting and financial reporting application** designed
 - `POST /ingest/blockchain/detect` - Detect chain from hash format
 - `POST /ingest/blockchain/ingest` - Fetch TX and create journal entry
 
+### OCR Invoice Scanning (`/core/ocr`)
+
+| Service        | File          | Description                                    |
+|----------------|---------------|------------------------------------------------|
+| **OCRService** | `service.ts`  | Main service orchestrating upload + extraction |
+| **Upload**     | `upload.ts`   | File upload to Cloudflare R2 (with local fallback) |
+| **Extract**    | `extract.ts`  | OpenAI Vision API for invoice data extraction  |
+
+**API Endpoints:**
+- `GET /invoices/ocr/status` - Check OCR configuration status
+- `POST /invoices/ocr/scan` - Upload image and extract invoice data
+- `POST /invoices/ocr/create-from-extracted` - Create invoice from extracted data
+
+**Supported Formats:** JPG, PNG, WebP (max 10MB)
+
 ### Calculation Services (`/core/calculations`)
 
 | Service                | File              | Description                              |

@@ -39,6 +39,7 @@ import { RatioService } from "./core/calculations/ratios";
 import { FormulaService } from "./core/calculations/formulas";
 import { FXService } from "./core/calculations/fx";
 import { AutoIngestService } from "./core/blockchain";
+import { OCRService } from "./core/ocr";
 
 // New routes
 import { buildInvoicesRouter } from "./routes/invoices";
@@ -105,6 +106,9 @@ export const buildApp = async () => {
   
   // Blockchain auto-ingestion service
   const autoIngest = new AutoIngestService(store, pricing, ledger);
+  
+  // OCR service for invoice scanning
+  const ocr = new OCRService(invoices);
 
   // Static UI (login/token helper) served before auth
   const publicDir = path.join(process.cwd(), "public");
@@ -125,7 +129,7 @@ export const buildApp = async () => {
   app.use("/close", buildCloseRouter(close));
 
   // New routes
-  app.use("/invoices", buildInvoicesRouter(invoices, store));
+  app.use("/invoices", buildInvoicesRouter(invoices, store, ocr));
   app.use("/expenses", buildExpensesRouter(expenses));
   app.use("/payroll", buildPayrollRouter(payroll));
   app.use("/bank-txns", buildBankTxnsRouter(bankTxns));

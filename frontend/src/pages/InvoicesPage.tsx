@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { api } from "../lib/api";
 
 interface Invoice {
@@ -21,6 +21,27 @@ interface LineItem {
   taxRate: number;
 }
 
+interface ExtractedInvoice {
+  vendorName: string;
+  vendorAddress?: string;
+  invoiceNumber?: string;
+  invoiceDate?: string;
+  dueDate?: string;
+  subtotal?: number;
+  taxAmount?: number;
+  total: number;
+  currency: string;
+  lineItems: Array<{
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    amount: number;
+    taxRate?: number;
+  }>;
+  notes?: string;
+  confidence: number;
+}
+
 const InvoicesPage = () => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [accounts, setAccounts] = useState<any[]>([]);
@@ -39,6 +60,15 @@ const InvoicesPage = () => {
     { description: "", quantity: 1, unitPrice: 0, accountId: "", taxRate: 10 }
   ]);
   const [status, setStatus] = useState("");
+
+  // OCR State
+  const [showOCR, setShowOCR] = useState(false);
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [ocrStatus, setOcrStatus] = useState("");
+  const [extractedData, setExtractedData] = useState<ExtractedInvoice | null>(null);
+  const [fileUrl, setFileUrl] = useState("");
+  const [dragActive, setDragActive] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadInvoices();
@@ -122,6 +152,99 @@ const InvoicesPage = () => {
     }
   };
 
+  // OCR Functions
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      handleFile(e.target.files[0]);
+    }
+  };
+
+  const handleFile = async (file: File) => {
+    const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+    if (!allowedTypes.includes(file.type)) {
+      setOcrStatus("Unsupported file type. Please upload JPG, PNG, or WebP images.");
+      return;
+    }
+
+    setOcrLoading(true);
+    setOcrStatus("Uploading and scanning invoice...");
+    setExtractedData(null);
+    setFileUrl("");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("orgId", "demo-org");
+      formData.append("type", "payable"); // Default to bills/payables
+      formData.append("autoCreate", "false"); // Don't auto-create, let user review
+
+      const res = await api.post("/invoices/ocr/scan", formData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+
+      if (res.data.success) {
+        setExtractedData(res.data.extracted);
+        setFileUrl(res.data.fileUrl);
+        setOcrStatus(`✓ Extracted with ${Math.round((res.data.extracted?.confidence || 0) * 100)}% confidence`);
+      } else {
+        setOcrStatus(`Error: ${res.data.error}`);
+      }
+    } catch (e: any) {
+      setOcrStatus(`Error: ${e.response?.data?.error || e.message}`);
+    } finally {
+      setOcrLoading(false);
+    }
+  };
+
+  const createFromExtracted = async () => {
+    if (!extractedData) return;
+
+    setOcrLoading(true);
+    setOcrStatus("Creating invoice...");
+
+    try {
+      const res = await api.post("/invoices/ocr/create-from-extracted", {
+        extracted: extractedData,
+        orgId: "demo-org",
+        invoiceType: "payable",
+        receiptUrl: fileUrl
+      });
+
+      if (res.data.success) {
+        setOcrStatus("✓ Invoice created!");
+        setExtractedData(null);
+        setFileUrl("");
+        setShowOCR(false);
+        loadInvoices();
+      } else {
+        setOcrStatus(`Error: ${res.data.error}`);
+      }
+    } catch (e: any) {
+      setOcrStatus(`Error: ${e.response?.data?.error || e.message}`);
+    } finally {
+      setOcrLoading(false);
+    }
+  };
+
   return (
     <div className="page">
       <h2>Invoices (AR/AP)</h2>
@@ -135,7 +258,110 @@ const InvoicesPage = () => {
         <button className="btn" onClick={() => setShowForm(!showForm)}>
           {showForm ? "Cancel" : "+ New Invoice"}
         </button>
+        <button 
+          className="btn secondary" 
+          onClick={() => { setShowOCR(!showOCR); setShowForm(false); }}
+        >
+          📷 Scan Invoice
+        </button>
       </div>
+
+      {/* OCR Upload Section */}
+      {showOCR && (
+        <div className="form-card" style={{ marginBottom: 20 }}>
+          <h3>📷 Scan Invoice / Receipt</h3>
+          <p className="muted">Upload an image of an invoice or receipt to automatically extract data.</p>
+          
+          <div
+            className={`drop-zone ${dragActive ? "active" : ""}`}
+            onDragEnter={handleDrag}
+            onDragLeave={handleDrag}
+            onDragOver={handleDrag}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            style={{
+              border: `2px dashed ${dragActive ? "var(--accent)" : "var(--border)"}`,
+              borderRadius: 8,
+              padding: 40,
+              textAlign: "center",
+              cursor: "pointer",
+              background: dragActive ? "var(--bg-secondary)" : "transparent",
+              transition: "all 0.2s"
+            }}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={handleFileInput}
+              style={{ display: "none" }}
+            />
+            <div style={{ fontSize: 48, marginBottom: 8 }}>📄</div>
+            <p style={{ margin: 0 }}>
+              {ocrLoading ? "Processing..." : "Drop image here or click to upload"}
+            </p>
+            <p className="muted" style={{ fontSize: "0.85em", marginTop: 4 }}>
+              Supports: JPG, PNG, WebP (max 10MB)
+            </p>
+          </div>
+
+          {ocrStatus && (
+            <p className="status" style={{ marginTop: 12 }}>{ocrStatus}</p>
+          )}
+
+          {extractedData && (
+            <div style={{ marginTop: 20, padding: 16, background: "var(--bg-secondary)", borderRadius: 8 }}>
+              <h4 style={{ marginTop: 0 }}>Extracted Data</h4>
+              <table style={{ width: "100%", fontSize: "0.9em" }}>
+                <tbody>
+                  <tr><td style={{ fontWeight: 500, width: 120 }}>Vendor</td><td>{extractedData.vendorName}</td></tr>
+                  {extractedData.invoiceNumber && <tr><td style={{ fontWeight: 500 }}>Invoice #</td><td>{extractedData.invoiceNumber}</td></tr>}
+                  {extractedData.invoiceDate && <tr><td style={{ fontWeight: 500 }}>Date</td><td>{extractedData.invoiceDate}</td></tr>}
+                  {extractedData.dueDate && <tr><td style={{ fontWeight: 500 }}>Due Date</td><td>{extractedData.dueDate}</td></tr>}
+                  <tr><td style={{ fontWeight: 500 }}>Subtotal</td><td>{extractedData.subtotal?.toFixed(2)} {extractedData.currency}</td></tr>
+                  <tr><td style={{ fontWeight: 500 }}>Tax</td><td>{extractedData.taxAmount?.toFixed(2)} {extractedData.currency}</td></tr>
+                  <tr><td style={{ fontWeight: 500 }}>Total</td><td style={{ fontWeight: 600, fontSize: "1.1em" }}>{extractedData.total.toFixed(2)} {extractedData.currency}</td></tr>
+                </tbody>
+              </table>
+              
+              {extractedData.lineItems.length > 0 && (
+                <>
+                  <h5 style={{ marginBottom: 8 }}>Line Items ({extractedData.lineItems.length})</h5>
+                  <table style={{ width: "100%", fontSize: "0.85em" }}>
+                    <thead>
+                      <tr style={{ textAlign: "left" }}>
+                        <th>Description</th>
+                        <th>Qty</th>
+                        <th>Price</th>
+                        <th>Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {extractedData.lineItems.slice(0, 5).map((li, i) => (
+                        <tr key={i}>
+                          <td>{li.description.slice(0, 40)}{li.description.length > 40 ? "..." : ""}</td>
+                          <td>{li.quantity}</td>
+                          <td>{li.unitPrice.toFixed(2)}</td>
+                          <td>{li.amount.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
+
+              <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
+                <button className="btn" onClick={createFromExtracted} disabled={ocrLoading}>
+                  ✓ Create Invoice
+                </button>
+                <button className="btn secondary" onClick={() => { setExtractedData(null); setOcrStatus(""); }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {showForm && (
         <div className="form-card">
