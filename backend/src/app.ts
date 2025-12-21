@@ -80,10 +80,11 @@ export const buildApp = async () => {
 
   if (usePostgres) {
     logger.info("Using PostgreSQL database");
-    // Run migrations first
+    // Run migrations first (with IPv4 resolution)
     await runMigrations();
-    // Create PostgreSQL store
+    // Create PostgreSQL store with IPv4 resolution
     const pgStore = new PgStore(process.env.DATABASE_URL!, DEFAULT_ORG, config.defaultCurrency);
+    await pgStore.initConnection();
     await pgStore.initialize();
     store = pgStore;
   } else {

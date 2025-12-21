@@ -4,6 +4,22 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { sql } from "drizzle-orm";
 import * as schema from "./schema";
 import { logger } from "../utils/logger";
+import dns from "dns";
+import { promisify } from "util";
+
+const dnsLookup = promisify(dns.lookup);
+
+// Resolve hostname to IPv4 address (Render free tier doesn't support IPv6 outbound)
+async function resolveHostToIPv4(hostname: string): Promise<string> {
+  try {
+    const result = await dnsLookup(hostname, { family: 4 });
+    logger.info(`Resolved ${hostname} to ${result.address} (IPv4)`);
+    return result.address;
+  } catch (error) {
+    logger.warn(`Failed to resolve ${hostname} to IPv4, using original hostname`, error);
+    return hostname;
+  }
+}
 
 /**
  * Run database migrations
@@ -15,8 +31,28 @@ export async function runMigrations() {
     throw new Error("DATABASE_URL environment variable is not set");
   }
 
-  const pool = new Pool({ connectionString });
-  const db = drizzle(pool, { schema });
+  // Parse connection string and resolve hostname to IPv4
+  const url = new URL(connectionString);
+  const hostname = url.hostname;
+  const port = parseInt(url.port) || 5432;
+  const database = url.pathname.slice(1);
+  const user = url.username;
+  const password = decodeURIComponent(url.password);
+  
+  logger.info(`Connecting to PostgreSQL at ${hostname}:${port}/${database}`);
+  
+  // Resolve hostname to IPv4 to avoid IPv6 issues on Render
+  const resolvedHost = await resolveHostToIPv4(hostname);
+  
+  const pool = new Pool({
+    host: resolvedHost,
+    port,
+    database,
+    user,
+    password,
+    ssl: { rejectUnauthorized: false },
+    connectionTimeoutMillis: 10000,
+  });
 
   try {
     logger.info("Running database migrations...");

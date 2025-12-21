@@ -5,6 +5,8 @@ import * as schema from "./schema";
 import { buildDefaultCoa } from "../core/coa";
 import { newId } from "../utils/id";
 import { logger } from "../utils/logger";
+import dns from "dns";
+import { promisify } from "util";
 import {
   Account, Wallet, JournalEntry, JournalLine, PriceTick, FXRate,
   ReconciliationItem, AuditLogEntry, PeriodLock, ChecklistItem, Role,
@@ -13,20 +15,52 @@ import {
   DepreciationEntry, TaxRate, Formula, Counterparty
 } from "../core/types";
 
+const dnsLookup = promisify(dns.lookup);
+
 type DrizzleDb = ReturnType<typeof drizzle<typeof schema>>;
 
 export class PgStore {
-  private pool: Pool;
-  private db: DrizzleDb;
+  private pool!: Pool;
+  private db!: DrizzleDb;
+  private connectionString: string;
 
   constructor(connectionString: string, private seedOrgId: string, private seedCurrency: string) {
+    this.connectionString = connectionString;
+  }
+  
+  // Initialize with IPv4 resolution (must be called before using the store)
+  async initConnection(): Promise<void> {
+    // Parse connection string and resolve hostname to IPv4
+    const url = new URL(this.connectionString);
+    const hostname = url.hostname;
+    const port = parseInt(url.port) || 5432;
+    const database = url.pathname.slice(1);
+    const user = url.username;
+    const password = decodeURIComponent(url.password);
+    
+    // Resolve hostname to IPv4 to avoid IPv6 issues on Render
+    let resolvedHost = hostname;
+    try {
+      const result = await dnsLookup(hostname, { family: 4 });
+      resolvedHost = result.address;
+      logger.info(`Resolved ${hostname} to ${resolvedHost} (IPv4)`);
+    } catch (error) {
+      logger.warn(`Failed to resolve ${hostname} to IPv4, using original hostname`);
+    }
+    
     this.pool = new Pool({
-      connectionString,
+      host: resolvedHost,
+      port,
+      database,
+      user,
+      password,
+      ssl: { rejectUnauthorized: false },
       max: 20,
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
+      connectionTimeoutMillis: 10000,
     });
     this.db = drizzle(this.pool, { schema });
+    logger.info(`PgStore connected to ${resolvedHost}:${port}/${database}`);
   }
 
   async initialize() {
