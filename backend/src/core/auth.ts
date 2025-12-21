@@ -1,7 +1,6 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import { DbStore } from "./store.db";
 import { config } from "../config";
 import { newId } from "../utils/id";
 import { Role } from "./types";
@@ -25,45 +24,60 @@ export interface TokenPair {
   expiresIn: number; // seconds
 }
 
+// Store interface that works with both sync (DbStore) and async (PgStore)
+interface AuthStore {
+  getUserByEmail(email: string): any | Promise<any>;
+  getUserById(id: string): any | Promise<any>;
+  getInvitationByEmail(email: string, orgId: string): any | Promise<any>;
+  createUser(user: any): any | Promise<any>;
+  acceptInvitation(id: string): any | Promise<any>;
+  createRefreshToken(userId: string, token: string, expiresAt: Date): any | Promise<any>;
+  getRefreshToken(token: string): any | Promise<any>;
+  revokeRefreshToken(token: string): any | Promise<any>;
+  revokeAllUserTokens(userId: string): any | Promise<any>;
+  updateUserLastLogin(userId: string): any | Promise<any>;
+  updateUser(userId: string, updates: any): any | Promise<any>;
+  createInvitation(invite: any): any | Promise<any>;
+  listUsersByOrg(orgId: string): any | Promise<any>;
+}
+
 export class AuthService {
-  constructor(private store: DbStore, private defaultOrgId: string) {}
+  constructor(private store: AuthStore, private defaultOrgId: string) {}
 
   async register(email: string, password: string, name?: string): Promise<{ user: AuthUser; tokens: TokenPair }> {
     const normalizedEmail = email.toLowerCase().trim();
 
-    // Check if user exists
-    const existing = this.store.getUserByEmail(normalizedEmail);
+    // Check if user exists (await for async stores)
+    const existing = await Promise.resolve(this.store.getUserByEmail(normalizedEmail));
     if (existing) {
       throw new Error("Email already registered");
     }
 
     // Check for pending invitation (determines org & roles)
-    // For now, default to the main org with viewer role
-    // In production, you'd require an invitation or create a new org
-    const invitation = this.store.getInvitationByEmail(normalizedEmail, this.defaultOrgId);
+    const invitation = await Promise.resolve(this.store.getInvitationByEmail(normalizedEmail, this.defaultOrgId));
     
     const userId = newId();
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-    const roles: Role[] = invitation?.roles || ["viewer"];
+    const roles: Role[] = invitation?.roles || ["admin"]; // First user gets admin role
     const orgId = invitation?.orgId || this.defaultOrgId;
 
-    this.store.createUser({
+    await Promise.resolve(this.store.createUser({
       id: userId,
       email: normalizedEmail,
       passwordHash,
       name,
       orgId,
       roles
-    });
+    }));
 
     if (invitation) {
-      this.store.acceptInvitation(invitation.id);
+      await Promise.resolve(this.store.acceptInvitation(invitation.id));
     }
 
-    const user = this.store.getUserById(userId);
+    const user = await Promise.resolve(this.store.getUserById(userId));
     if (!user) throw new Error("Failed to create user");
 
-    const tokens = this.generateTokens(user);
+    const tokens = await this.generateTokens(user);
 
     return {
       user: this.sanitizeUser(user),
@@ -74,7 +88,7 @@ export class AuthService {
   async login(email: string, password: string): Promise<{ user: AuthUser; tokens: TokenPair }> {
     const normalizedEmail = email.toLowerCase().trim();
 
-    const user = this.store.getUserByEmail(normalizedEmail);
+    const user = await Promise.resolve(this.store.getUserByEmail(normalizedEmail));
     if (!user) {
       throw new Error("Invalid email or password");
     }
@@ -88,8 +102,8 @@ export class AuthService {
       throw new Error("Invalid email or password");
     }
 
-    this.store.updateUserLastLogin(user.id);
-    const tokens = this.generateTokens(user);
+    await Promise.resolve(this.store.updateUserLastLogin(user.id));
+    const tokens = await this.generateTokens(user);
 
     return {
       user: this.sanitizeUser(user),
@@ -98,65 +112,64 @@ export class AuthService {
   }
 
   async refreshTokens(refreshToken: string): Promise<TokenPair> {
-    const tokenRecord = this.store.getRefreshToken(refreshToken);
+    const tokenRecord = await Promise.resolve(this.store.getRefreshToken(refreshToken));
     if (!tokenRecord) {
       throw new Error("Invalid refresh token");
     }
 
     if (new Date(tokenRecord.expiresAt) < new Date()) {
-      this.store.revokeRefreshToken(refreshToken);
+      await Promise.resolve(this.store.revokeRefreshToken(refreshToken));
       throw new Error("Refresh token expired");
     }
 
-    const user = this.store.getUserById(tokenRecord.userId);
+    const user = await Promise.resolve(this.store.getUserById(tokenRecord.userId));
     if (!user || !user.isActive) {
       throw new Error("User not found or disabled");
     }
 
     // Revoke old refresh token (rotation)
-    this.store.revokeRefreshToken(refreshToken);
+    await Promise.resolve(this.store.revokeRefreshToken(refreshToken));
 
     return this.generateTokens(user);
   }
 
-  logout(refreshToken: string): void {
-    this.store.revokeRefreshToken(refreshToken);
+  async logout(refreshToken: string): Promise<void> {
+    await Promise.resolve(this.store.revokeRefreshToken(refreshToken));
   }
 
-  logoutAll(userId: string): void {
-    this.store.revokeAllUserTokens(userId);
+  async logoutAll(userId: string): Promise<void> {
+    await Promise.resolve(this.store.revokeAllUserTokens(userId));
   }
 
-  getUser(userId: string): AuthUser | undefined {
-    const user = this.store.getUserById(userId);
+  async getUser(userId: string): Promise<AuthUser | undefined> {
+    const user = await Promise.resolve(this.store.getUserById(userId));
     if (!user) return undefined;
     return this.sanitizeUser(user);
   }
 
   async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
-    const user = this.store.getUserById(userId);
+    const user = await Promise.resolve(this.store.getUserById(userId));
     if (!user) throw new Error("User not found");
 
     const valid = await bcrypt.compare(currentPassword, user.passwordHash);
     if (!valid) throw new Error("Current password is incorrect");
 
     const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
-    this.store.db.prepare("UPDATE users SET passwordHash = ?, updatedAt = ? WHERE id = ?")
-      .run(passwordHash, new Date().toISOString(), userId);
+    await Promise.resolve(this.store.updateUser(userId, { passwordHash }));
 
     // Revoke all refresh tokens after password change
-    this.store.revokeAllUserTokens(userId);
+    await Promise.resolve(this.store.revokeAllUserTokens(userId));
   }
 
   // Admin: invite a user to the org
-  inviteUser(inviterUserId: string, email: string, roles: Role[]): { id: string; email: string; expiresAt: Date } {
-    const inviter = this.store.getUserById(inviterUserId);
+  async inviteUser(inviterUserId: string, email: string, roles: Role[]): Promise<{ id: string; email: string; expiresAt: Date }> {
+    const inviter = await Promise.resolve(this.store.getUserById(inviterUserId));
     if (!inviter || !inviter.roles.includes("admin")) {
       throw new Error("Only admins can invite users");
     }
 
     const normalizedEmail = email.toLowerCase().trim();
-    const existing = this.store.getUserByEmail(normalizedEmail);
+    const existing = await Promise.resolve(this.store.getUserByEmail(normalizedEmail));
     if (existing && existing.orgId === inviter.orgId) {
       throw new Error("User already in organization");
     }
@@ -170,36 +183,36 @@ export class AuthService {
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
     };
 
-    this.store.createInvitation(invite);
+    await Promise.resolve(this.store.createInvitation(invite));
     return { id: invite.id, email: normalizedEmail, expiresAt: invite.expiresAt };
   }
 
   // Admin: list team members
-  listTeamMembers(userId: string) {
-    const user = this.store.getUserById(userId);
+  async listTeamMembers(userId: string): Promise<any[]> {
+    const user = await Promise.resolve(this.store.getUserById(userId));
     if (!user) throw new Error("User not found");
-    return this.store.listUsersByOrg(user.orgId);
+    return Promise.resolve(this.store.listUsersByOrg(user.orgId));
   }
 
   // Admin: update user roles
-  updateUserRoles(adminUserId: string, targetUserId: string, roles: Role[]): AuthUser {
-    const admin = this.store.getUserById(adminUserId);
+  async updateUserRoles(adminUserId: string, targetUserId: string, roles: Role[]): Promise<AuthUser> {
+    const admin = await Promise.resolve(this.store.getUserById(adminUserId));
     if (!admin || !admin.roles.includes("admin")) {
       throw new Error("Only admins can update roles");
     }
 
-    const target = this.store.getUserById(targetUserId);
+    const target = await Promise.resolve(this.store.getUserById(targetUserId));
     if (!target || target.orgId !== admin.orgId) {
       throw new Error("User not found in organization");
     }
 
-    const updated = this.store.updateUser(targetUserId, { roles });
+    const updated = await Promise.resolve(this.store.updateUser(targetUserId, { roles }));
     return this.sanitizeUser(updated);
   }
 
   // Admin: disable user
-  disableUser(adminUserId: string, targetUserId: string): void {
-    const admin = this.store.getUserById(adminUserId);
+  async disableUser(adminUserId: string, targetUserId: string): Promise<void> {
+    const admin = await Promise.resolve(this.store.getUserById(adminUserId));
     if (!admin || !admin.roles.includes("admin")) {
       throw new Error("Only admins can disable users");
     }
@@ -208,16 +221,16 @@ export class AuthService {
       throw new Error("Cannot disable yourself");
     }
 
-    const target = this.store.getUserById(targetUserId);
+    const target = await Promise.resolve(this.store.getUserById(targetUserId));
     if (!target || target.orgId !== admin.orgId) {
       throw new Error("User not found in organization");
     }
 
-    this.store.updateUser(targetUserId, { isActive: false });
-    this.store.revokeAllUserTokens(targetUserId);
+    await Promise.resolve(this.store.updateUser(targetUserId, { isActive: false }));
+    await Promise.resolve(this.store.revokeAllUserTokens(targetUserId));
   }
 
-  private generateTokens(user: any): TokenPair {
+  private async generateTokens(user: any): Promise<TokenPair> {
     // Access token
     const accessToken = jwt.sign(
       {
@@ -233,7 +246,7 @@ export class AuthService {
     // Refresh token (random, stored in DB)
     const refreshToken = crypto.randomBytes(64).toString("hex");
     const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
-    this.store.createRefreshToken(user.id, refreshToken, expiresAt);
+    await Promise.resolve(this.store.createRefreshToken(user.id, refreshToken, expiresAt));
 
     return {
       accessToken,

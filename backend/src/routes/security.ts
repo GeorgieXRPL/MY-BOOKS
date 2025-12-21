@@ -109,10 +109,10 @@ export const buildSecurityRouter = (
   });
 
   // Logout
-  router.post("/auth/logout", (req, res) => {
+  router.post("/auth/logout", async (req, res) => {
     const { refreshToken } = req.body;
     if (refreshToken) {
-      auth.logout(refreshToken);
+      await auth.logout(refreshToken);
     }
     return res.json({ ok: true });
   });
@@ -120,9 +120,9 @@ export const buildSecurityRouter = (
   // ============ AUTHENTICATED ROUTES ============
 
   // Get current user profile
-  router.get("/auth/me", requireRoles([]), (req: AuthenticatedRequest, res) => {
+  router.get("/auth/me", requireRoles([]), async (req: AuthenticatedRequest, res) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-    const user = auth.getUser(req.user.id);
+    const user = await auth.getUser(req.user.id);
     if (!user) return res.status(404).json({ error: "User not found" });
     return res.json(user);
   });
@@ -149,23 +149,23 @@ export const buildSecurityRouter = (
   });
 
   // Logout from all devices
-  router.post("/auth/logout-all", requireRoles([]), (req: AuthenticatedRequest, res) => {
+  router.post("/auth/logout-all", requireRoles([]), async (req: AuthenticatedRequest, res) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-    auth.logoutAll(req.user.id);
+    await auth.logoutAll(req.user.id);
     return res.json({ ok: true, message: "Logged out from all devices" });
   });
 
   // ============ ADMIN: TEAM MANAGEMENT ============
 
   // List team members
-  router.get("/team", requireRoles(["admin"]), (req: AuthenticatedRequest, res) => {
+  router.get("/team", requireRoles(["admin"]), async (req: AuthenticatedRequest, res) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-    const members = auth.listTeamMembers(req.user.id);
+    const members = await auth.listTeamMembers(req.user.id);
     return res.json(members);
   });
 
   // Invite user to team
-  router.post("/team/invite", requireRoles(["admin"]), (req: AuthenticatedRequest, res) => {
+  router.post("/team/invite", requireRoles(["admin"]), async (req: AuthenticatedRequest, res) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
 
@@ -174,7 +174,7 @@ export const buildSecurityRouter = (
         return res.status(400).json({ error: parsed.error.errors[0].message });
       }
 
-      const invite = auth.inviteUser(req.user.id, parsed.data.email, parsed.data.roles as Role[]);
+      const invite = await auth.inviteUser(req.user.id, parsed.data.email, parsed.data.roles as Role[]);
       return res.json(invite);
     } catch (err: any) {
       return res.status(400).json({ error: err.message });
@@ -182,7 +182,7 @@ export const buildSecurityRouter = (
   });
 
   // Update user roles
-  router.patch("/team/:userId/roles", requireRoles(["admin"]), (req: AuthenticatedRequest, res) => {
+  router.patch("/team/:userId/roles", requireRoles(["admin"]), async (req: AuthenticatedRequest, res) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
       const { roles } = req.body;
@@ -190,7 +190,7 @@ export const buildSecurityRouter = (
         return res.status(400).json({ error: "Roles must be an array" });
       }
 
-      const updated = auth.updateUserRoles(req.user.id, req.params.userId, roles);
+      const updated = await auth.updateUserRoles(req.user.id, req.params.userId, roles);
       return res.json(updated);
     } catch (err: any) {
       return res.status(400).json({ error: err.message });
@@ -198,10 +198,10 @@ export const buildSecurityRouter = (
   });
 
   // Disable user
-  router.post("/team/:userId/disable", requireRoles(["admin"]), (req: AuthenticatedRequest, res) => {
+  router.post("/team/:userId/disable", requireRoles(["admin"]), async (req: AuthenticatedRequest, res) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-      auth.disableUser(req.user.id, req.params.userId);
+      await auth.disableUser(req.user.id, req.params.userId);
       return res.json({ ok: true });
     } catch (err: any) {
       return res.status(400).json({ error: err.message });
