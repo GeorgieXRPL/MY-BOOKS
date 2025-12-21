@@ -232,10 +232,17 @@ This is a **full-stack accounting and financial reporting application** designed
 | `core/store.db.ts`  | SQLite-backed persistent store                  |
 | `db/store.pg.ts`    | **PostgreSQL store (production/Supabase)**      |
 | `db/schema.ts`      | Drizzle ORM schema definitions                  |
-| `db/client.ts`      | PostgreSQL connection pool                      |
-| `db/migrate.ts`     | Database migration runner                       |
+| `db/client.ts`      | PostgreSQL connection pool with IPv4 resolution |
+| `db/migrate.ts`     | Database migration runner with IPv4 resolution  |
 
 **Database Selection:** The app automatically uses PostgreSQL if `DATABASE_URL` is set, otherwise falls back to SQLite.
+
+**IPv4 Compatibility:** The database client includes automatic IPv4 DNS resolution to work with platforms like Render that don't support IPv6 outbound connections. When connecting:
+1. The hostname is extracted from the connection string
+2. DNS lookup forces IPv4 with `dns.lookup(hostname, { family: 4 })`
+3. The resolved IPv4 address is used for the connection
+
+**Important:** When using Supabase, you must use the **Session Pooler** connection string (hostname: `aws-0-xxx.pooler.supabase.com`), NOT the Direct Connection (hostname: `db.xxx.supabase.co`) which is IPv6-only.
 
 ### Middleware (`/middleware`)
 

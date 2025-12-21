@@ -73,27 +73,41 @@ VITE_API_BASE_URL=https://your-app.onrender.com
 
 ### Step 1.3: Get Your Connection String
 
-**Method A: Via Connect Button (Easiest)**
-1. In your project dashboard, click the **"Connect"** button (top right)
-2. Select **"URI"** tab
-3. Copy the connection string
-4. Replace `[YOUR-PASSWORD]` with the password you saved
+**⚠️ CRITICAL: You MUST use Session Pooler, NOT Direct Connection!**
 
-**Method B: Via Project Settings**
-1. Click the **⚙️ Settings** icon (bottom of left sidebar)
-2. Click **"Database"** in the menu
-3. Scroll to **"Connection string"** section
-4. Select the **"URI"** tab
-5. Copy and replace `[YOUR-PASSWORD]`
+Render's free tier only supports **IPv4**, but Supabase's Direct Connection only supports **IPv6**. You must use the **Session Pooler** connection.
 
-**Your connection string looks like:**
+**How to get the correct URI:**
+
+1. In your Supabase project dashboard, click the **"Connect"** button (top right)
+2. You'll see connection options - look for **"Session pooler"** or **"Connection pooling"**
+3. **DO NOT use "Direct connection"** - it says "Not IPv4 compatible"
+4. Select **"Session pooler"** (or "Session mode")
+5. Copy the URI and replace `[YOUR-PASSWORD]` with your database password
+
+**Connection Types Comparison:**
+
+| Type | Hostname | IPv4 | Use For |
+|------|----------|------|---------|
+| ❌ Direct | `db.xxx.supabase.co` | No | VMs with IPv6 |
+| ✅ Session Pooler | `aws-0-xxx.pooler.supabase.com` | Yes | **Render, Vercel, etc.** |
+| ✅ Transaction Pooler | `aws-0-xxx.pooler.supabase.com:6543` | Yes | Serverless functions |
+
+**Correct Session Pooler URI format:**
 ```
-postgresql://postgres.abcdefghij:[YOUR-PASSWORD]@aws-0-us-east-1.pooler.supabase.com:5432/postgres
+postgresql://postgres.PROJECT-REF:[YOUR-PASSWORD]@aws-0-REGION.pooler.supabase.com:5432/postgres
 ```
 
-**⚠️ Important:** 
-- Use the **pooler** connection (6543) for production
-- Save this string securely - you'll need it for Render
+**Example (with password replaced):**
+```
+postgresql://postgres.derkndhbuidekchkfuhq:MySecurePass123@aws-0-us-east-1.pooler.supabase.com:5432/postgres
+```
+
+**Common Mistakes:**
+- ❌ Using `db.xxx.supabase.co` (Direct connection - IPv6 only)
+- ❌ Leaving `[YOUR-PASSWORD]` with brackets
+- ❌ Using the wrong port (5432 for Session, 6543 for Transaction)
+- ✅ Using `aws-0-xxx.pooler.supabase.com` (Session Pooler - IPv4 compatible)
 
 ### Step 1.4: Forgot Your Password?
 
@@ -343,6 +357,8 @@ These unlock additional features. Add them as needed.
 | 401 errors | CORS blocking | Add frontend URL to `ALLOWED_ORIGINS` |
 | 500 errors | Database issue | Check `DATABASE_URL` in Render logs |
 | Tables missing | Migration didn't run | Check Render deploy logs for errors |
+| `ENETUNREACH` IPv6 error | Using Direct Connection | Use Session Pooler URI instead |
+| `ENOTFOUND` hostname error | Wrong Supabase hostname | Use `pooler.supabase.com` not `db.xxx.supabase.co` |
 
 ---
 
@@ -420,6 +436,29 @@ Free tier services sleep after 15 minutes of inactivity.
 - First request after sleep takes ~30 seconds
 - Consider upgrading to Starter ($7/mo) for always-on
 - Or use a service like [UptimeRobot](https://uptimerobot.com) to ping every 14 minutes
+
+### IPv6 / Supabase Connection Errors
+
+**Error:** `ENETUNREACH` or `connect ENETUNREACH 2600:1f18:...`
+
+**Cause:** You're using Supabase's "Direct Connection" which only supports IPv6. Render's free tier only supports IPv4.
+
+**Solution:**
+1. Go to Supabase Dashboard → Click **"Connect"** button
+2. Switch from "Direct connection" to **"Session pooler"**
+3. Copy the new URI (hostname should be `aws-0-xxx.pooler.supabase.com`)
+4. Update `DATABASE_URL` in Render
+5. Redeploy
+
+**Error:** `ENOTFOUND db.xxx.supabase.co`
+
+**Cause:** Using the wrong hostname format. The `db.xxx.supabase.co` format is for Direct Connection (IPv6 only).
+
+**Solution:** Use Session Pooler with hostname `aws-0-xxx.pooler.supabase.com`.
+
+**How to verify your URI is correct:**
+- ✅ Correct: `postgresql://postgres.xxx:password@aws-0-us-east-1.pooler.supabase.com:5432/postgres`
+- ❌ Wrong: `postgresql://postgres:password@db.xxx.supabase.co:5432/postgres`
 
 ---
 
