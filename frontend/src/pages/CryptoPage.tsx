@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { api } from "../lib/api";
+import { api, safeArray } from "../lib/api";
 
 interface CryptoTxn {
   id: string;
@@ -52,16 +52,19 @@ const CryptoPage = () => {
 
   const loadData = async () => {
     try {
-      const [txnRes, lotRes, holdRes] = await Promise.all([
+      const [txnRes, lotRes, holdRes] = await Promise.allSettled([
         api.get("/crypto/transactions?orgId=demo-org"),
         api.get("/crypto/lots?orgId=demo-org"),
         api.get("/crypto/holdings?orgId=demo-org")
       ]);
-      setTxns(txnRes.data);
-      setLots(lotRes.data);
-      setHoldings(holdRes.data);
+      setTxns(txnRes.status === "fulfilled" ? safeArray(txnRes.value.data) : []);
+      setLots(lotRes.status === "fulfilled" ? safeArray(lotRes.value.data) : []);
+      setHoldings(holdRes.status === "fulfilled" && holdRes.value.data ? holdRes.value.data : {});
     } catch (e: any) {
-      setStatus("Error: " + e.message);
+      console.warn("Failed to load crypto data:", e);
+      setTxns([]);
+      setLots([]);
+      setHoldings({});
     }
   };
 

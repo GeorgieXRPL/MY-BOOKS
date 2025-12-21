@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "../lib/api";
+import { api, safeArray } from "../lib/api";
 import { useAuthStore } from "../store/auth";
 
 type Journal = {
@@ -32,22 +32,26 @@ const JournalsPage = () => {
   const fetchJournals = async () => {
     try {
       const res = await api.get("/ledger/journals");
-      setJournals(res.data);
+      const data = safeArray(res.data?.items || res.data);
+      setJournals(data);
     } catch (err: any) {
-      setStatus(err?.response?.data?.error || err.message);
+      console.warn("Failed to load journals:", err);
+      setJournals([]);
     }
   };
 
   const fetchAccounts = async () => {
     try {
       const res = await api.get("/ledger/accounts");
-      setAccounts(res.data);
-      if (!debitAcct && res.data.length) {
-        setDebitAcct(res.data[0].id);
-        if (res.data[1]) setCreditAcct(res.data[1].id);
+      const data = safeArray(res.data);
+      setAccounts(data);
+      if (!debitAcct && data.length) {
+        setDebitAcct(data[0].id);
+        if (data[1]) setCreditAcct(data[1].id);
       }
     } catch (err: any) {
-      setStatus(err?.response?.data?.error || err.message);
+      console.warn("Failed to load accounts:", err);
+      setAccounts([]);
     }
   };
 

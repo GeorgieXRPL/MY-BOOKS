@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { api } from "../lib/api";
+import { api, safeArray } from "../lib/api";
 
 interface Expense {
   id: string;
@@ -43,9 +43,10 @@ const ExpensesPage = () => {
     try {
       const statusParam = filter === "all" ? "" : `&status=${filter}`;
       const res = await api.get(`/expenses?orgId=demo-org${statusParam}`);
-      setExpenses(res.data);
+      setExpenses(safeArray(res.data));
     } catch (e: any) {
-      setStatus("Error: " + e.message);
+      console.warn("Failed to load expenses:", e);
+      setExpenses([]);
     }
   };
 

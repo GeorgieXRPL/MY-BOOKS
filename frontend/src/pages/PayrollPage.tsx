@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { api } from "../lib/api";
+import { api, safeArray } from "../lib/api";
 
 interface Employee {
   id: string;
@@ -52,18 +52,20 @@ const PayrollPage = () => {
   const loadEmployees = async () => {
     try {
       const res = await api.get("/payroll/employees?orgId=demo-org");
-      setEmployees(res.data);
+      setEmployees(safeArray(res.data));
     } catch (e: any) {
-      setStatus("Error: " + e.message);
+      console.warn("Failed to load employees:", e);
+      setEmployees([]);
     }
   };
 
   const loadRuns = async () => {
     try {
       const res = await api.get("/payroll/runs?orgId=demo-org");
-      setRuns(res.data);
+      setRuns(safeArray(res.data));
     } catch (e: any) {
-      setStatus("Error: " + e.message);
+      console.warn("Failed to load payroll runs:", e);
+      setRuns([]);
     }
   };
 

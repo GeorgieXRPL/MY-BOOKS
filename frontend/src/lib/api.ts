@@ -83,4 +83,28 @@ api.interceptors.response.use(
   }
 );
 
+// Helper to safely extract array data from API responses
+export const safeArray = <T>(data: any): T[] => {
+  if (Array.isArray(data)) return data;
+  if (data?.data && Array.isArray(data.data)) return data.data;
+  return [];
+};
+
+// Helper to safely extract object data with defaults
+export const safeObject = <T extends object>(data: any, defaults: T): T => {
+  if (data && typeof data === 'object' && !data.error) return { ...defaults, ...data };
+  return defaults;
+};
+
+// Safe API call that returns default value on error
+export const safeApiGet = async <T>(url: string, defaultValue: T): Promise<T> => {
+  try {
+    const res = await api.get(url);
+    return res.data ?? defaultValue;
+  } catch (e) {
+    console.warn(`API call failed for ${url}:`, e);
+    return defaultValue;
+  }
+};
+
 export { api };

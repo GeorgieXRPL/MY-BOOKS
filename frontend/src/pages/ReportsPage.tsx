@@ -14,19 +14,20 @@ const ReportsPage = () => {
   const load = async () => {
     setStatus("Loading...");
     try {
-      const [bsRes, isRes, cfRes, trRes] = await Promise.all([
+      const [bsRes, isRes, cfRes, trRes] = await Promise.allSettled([
         api.get("/reports/balance-sheet", { params: { orgId, period } }),
         api.get("/reports/income-statement", { params: { orgId, period } }),
         api.get("/reports/cash-flow", { params: { orgId, period } }),
         api.get("/reports/treasury", { params: { orgId } })
       ]);
-      setBs(bsRes.data);
-      setIs(isRes.data);
-      setCf(cfRes.data);
-      setTreasury(trRes.data);
+      setBs(bsRes.status === "fulfilled" ? bsRes.value.data : null);
+      setIs(isRes.status === "fulfilled" ? isRes.value.data : null);
+      setCf(cfRes.status === "fulfilled" ? cfRes.value.data : null);
+      setTreasury(trRes.status === "fulfilled" ? trRes.value.data : null);
       setStatus("Loaded");
     } catch (err: any) {
-      setStatus(err?.response?.data?.error || err.message);
+      console.warn("Failed to load reports:", err);
+      setStatus("Some reports failed to load");
     }
   };
 

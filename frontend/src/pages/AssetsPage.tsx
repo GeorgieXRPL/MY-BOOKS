@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { api } from "../lib/api";
+import { api, safeArray } from "../lib/api";
 
 interface Asset {
   id: string;
@@ -54,27 +54,30 @@ const AssetsPage = () => {
   const loadAssets = async () => {
     try {
       const res = await api.get("/assets/reports/register?orgId=demo-org");
-      setAssets(res.data);
+      setAssets(safeArray(res.data));
     } catch (e: any) {
-      setStatus("Error: " + e.message);
+      console.warn("Failed to load assets:", e);
+      setAssets([]);
     }
   };
 
   const loadAccounts = async () => {
     try {
       const res = await api.get("/ledger/accounts?orgId=demo-org");
-      setAccounts(res.data);
+      setAccounts(safeArray(res.data));
     } catch (e) {
-      console.error(e);
+      console.warn("Failed to load accounts:", e);
+      setAccounts([]);
     }
   };
 
   const loadSchedule = async (assetId: string) => {
     try {
       const res = await api.get(`/assets/${assetId}/schedule`);
-      setSchedule(res.data);
+      setSchedule(safeArray(res.data));
     } catch (e: any) {
-      setStatus("Error: " + e.message);
+      console.warn("Failed to load schedule:", e);
+      setSchedule([]);
     }
   };
 

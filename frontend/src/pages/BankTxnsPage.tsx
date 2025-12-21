@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { api } from "../lib/api";
+import { api, safeArray } from "../lib/api";
 
 interface BankTxn {
   id: string;
@@ -38,18 +38,20 @@ const BankTxnsPage = () => {
     try {
       const statusParam = filter === "all" ? "" : `&status=${filter}`;
       const res = await api.get(`/bank-txns?orgId=demo-org${statusParam}`);
-      setTxns(res.data);
+      setTxns(safeArray(res.data));
     } catch (e: any) {
-      setStatus("Error: " + e.message);
+      console.warn("Failed to load bank transactions:", e);
+      setTxns([]);
     }
   };
 
   const loadAccounts = async () => {
     try {
       const res = await api.get("/ledger/accounts?orgId=demo-org");
-      setAccounts(res.data);
+      setAccounts(safeArray(res.data));
     } catch (e) {
-      console.error(e);
+      console.warn("Failed to load accounts:", e);
+      setAccounts([]);
     }
   };
 

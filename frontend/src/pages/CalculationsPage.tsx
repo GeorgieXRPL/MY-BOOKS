@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { api } from "../lib/api";
+import { api, safeArray, safeObject } from "../lib/api";
 
 interface Ratio {
   name: string;
@@ -45,19 +45,23 @@ const CalculationsPage = () => {
   const loadRatios = async () => {
     try {
       const res = await api.get("/calc/ratios/dashboard?orgId=demo-org");
-      setRatios(res.data.ratios || []);
-      setRatioSummary(res.data.summary);
+      const data = safeObject(res.data, { ratios: [], summary: null });
+      setRatios(safeArray(data.ratios));
+      setRatioSummary(data.summary);
     } catch (e: any) {
-      setStatus("Error: " + e.message);
+      console.warn("Failed to load ratios:", e);
+      setRatios([]);
+      setRatioSummary(null);
     }
   };
 
   const loadFormulas = async () => {
     try {
       const res = await api.get("/calc/formulas?orgId=demo-org");
-      setFormulas(res.data);
+      setFormulas(safeArray(res.data));
     } catch (e: any) {
-      setStatus("Error: " + e.message);
+      console.warn("Failed to load formulas:", e);
+      setFormulas([]);
     }
   };
 

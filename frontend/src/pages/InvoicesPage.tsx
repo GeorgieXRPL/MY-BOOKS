@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { api } from "../lib/api";
+import { api, safeArray } from "../lib/api";
 
 interface Invoice {
   id: string;
@@ -79,18 +79,20 @@ const InvoicesPage = () => {
     try {
       const typeParam = filter === "all" ? "" : `&type=${filter}`;
       const res = await api.get(`/invoices?orgId=demo-org${typeParam}`);
-      setInvoices(res.data);
+      setInvoices(safeArray(res.data));
     } catch (e: any) {
-      setStatus("Error: " + e.message);
+      console.warn("Failed to load invoices:", e);
+      setInvoices([]);
     }
   };
 
   const loadAccounts = async () => {
     try {
       const res = await api.get("/ledger/accounts?orgId=demo-org");
-      setAccounts(res.data);
+      setAccounts(safeArray(res.data));
     } catch (e) {
-      console.error(e);
+      console.warn("Failed to load accounts:", e);
+      setAccounts([]);
     }
   };
 
