@@ -80,14 +80,6 @@ export function getDb() {
   return db;
 }
 
-export function getDb() {
-  if (!db) {
-    db = drizzle(getPool(), { schema });
-    logger.info("Drizzle ORM initialized");
-  }
-  return db;
-}
-
 export async function closePool() {
   if (pool) {
     await pool.end();
