@@ -1,4 +1,4 @@
-import { DbStore } from "./store.db";
+import { IStore } from "./store.interface";
 import { Invoice, InvoiceLineItem, InvoiceStatus, InvoiceType } from "./types";
 import { newId } from "../utils/id";
 import { AuditLogService } from "./security/auditLog";
@@ -17,9 +17,9 @@ interface CreateInvoiceInput {
 }
 
 export class InvoiceService {
-  constructor(private store: DbStore, private audit: AuditLogService) {}
+  constructor(private store: IStore, private audit: AuditLogService) {}
 
-  create(input: CreateInvoiceInput): Invoice {
+  async create(input: CreateInvoiceInput): Promise<Invoice> {
     const lineItems: InvoiceLineItem[] = input.lineItems.map((li) => ({
       ...li,
       id: newId(),
@@ -33,10 +33,12 @@ export class InvoiceService {
     );
     const total = subtotal + taxAmount;
 
+    const invoiceNumber = await Promise.resolve(this.store.nextInvoiceNumber(input.orgId, input.type));
+
     const invoice: Invoice = {
       id: newId(),
       orgId: input.orgId,
-      invoiceNumber: this.store.nextInvoiceNumber(input.orgId, input.type),
+      invoiceNumber,
       type: input.type,
       counterpartyId: input.counterpartyId,
       counterpartyName: input.counterpartyName,
@@ -54,8 +56,8 @@ export class InvoiceService {
       updatedAt: new Date().toISOString()
     };
 
-    this.store.addInvoice(invoice);
-    this.audit.log({
+    await Promise.resolve(this.store.addInvoice(invoice));
+    await this.audit.log({
       orgId: input.orgId,
       actorId: input.createdBy,
       action: "create",
@@ -67,12 +69,12 @@ export class InvoiceService {
     return invoice;
   }
 
-  get(id: string) {
-    return this.store.getInvoice(id);
+  async get(id: string): Promise<Invoice | undefined> {
+    return Promise.resolve(this.store.getInvoice(id));
   }
 
-  list(orgId: string, filters?: { type?: InvoiceType; status?: InvoiceStatus }) {
-    let invoices = this.store.listInvoices(orgId);
+  async list(orgId: string, filters?: { type?: InvoiceType; status?: InvoiceStatus }): Promise<Invoice[]> {
+    let invoices = await Promise.resolve(this.store.listInvoices(orgId));
     if (filters?.type) {
       invoices = invoices.filter((i) => i.type === filters.type);
     }
@@ -82,8 +84,8 @@ export class InvoiceService {
     return invoices;
   }
 
-  updateStatus(id: string, status: InvoiceStatus, actorId: string) {
-    const invoice = this.store.getInvoice(id);
+  async updateStatus(id: string, status: InvoiceStatus, actorId: string): Promise<Invoice> {
+    const invoice = await Promise.resolve(this.store.getInvoice(id));
     if (!invoice) throw new Error("Invoice not found");
 
     const patch: Partial<Invoice> = { status };
@@ -92,8 +94,9 @@ export class InvoiceService {
       patch.paidAmount = invoice.total;
     }
 
-    const updated = this.store.updateInvoice(id, patch);
-    this.audit.log({
+    await Promise.resolve(this.store.updateInvoice(id, patch));
+    const updated = await Promise.resolve(this.store.getInvoice(id));
+    await this.audit.log({
       orgId: invoice.orgId,
       actorId,
       action: "update_status",
@@ -103,20 +106,21 @@ export class InvoiceService {
       after: { status }
     });
 
-    return updated;
+    return updated!;
   }
 
-  markPaid(id: string, paidAmount: number, actorId: string) {
-    const invoice = this.store.getInvoice(id);
+  async markPaid(id: string, paidAmount: number, actorId: string): Promise<Invoice> {
+    const invoice = await Promise.resolve(this.store.getInvoice(id));
     if (!invoice) throw new Error("Invoice not found");
 
-    const updated = this.store.updateInvoice(id, {
+    await Promise.resolve(this.store.updateInvoice(id, {
       status: "paid",
       paidDate: new Date().toISOString(),
       paidAmount
-    });
+    }));
+    const updated = await Promise.resolve(this.store.getInvoice(id));
 
-    this.audit.log({
+    await this.audit.log({
       orgId: invoice.orgId,
       actorId,
       action: "mark_paid",
@@ -125,11 +129,12 @@ export class InvoiceService {
       after: { paidAmount }
     });
 
-    return updated;
+    return updated!;
   }
 
-  agingReport(orgId: string, type: InvoiceType) {
-    const invoices = this.store.listInvoices(orgId).filter(
+  async agingReport(orgId: string, type: InvoiceType) {
+    const allInvoices = await Promise.resolve(this.store.listInvoices(orgId));
+    const invoices = allInvoices.filter(
       (i) => i.type === type && i.status !== "paid" && i.status !== "cancelled"
     );
 

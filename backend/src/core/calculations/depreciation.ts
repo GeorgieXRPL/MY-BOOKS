@@ -1,4 +1,4 @@
-import { DbStore } from "../store.db";
+import { IStore } from "../store.interface";
 import { Asset, DepreciationEntry, DepreciationMethod } from "../types";
 import { newId } from "../../utils/id";
 import { LedgerService } from "../ledger";
@@ -19,10 +19,10 @@ interface CreateAssetInput {
 }
 
 export class DepreciationService {
-  constructor(private store: DbStore, private ledger: LedgerService) {}
+  constructor(private store: IStore, private ledger: LedgerService) {}
 
   // ============ ASSETS ============
-  addAsset(input: CreateAssetInput): Asset {
+  async addAsset(input: CreateAssetInput): Promise<Asset> {
     const asset: Asset = {
       id: newId(),
       orgId: input.orgId,
@@ -42,20 +42,20 @@ export class DepreciationService {
       updatedAt: new Date().toISOString()
     };
 
-    this.store.addAsset(asset);
+    await Promise.resolve(this.store.addAsset(asset));
     return asset;
   }
 
-  listAssets(orgId: string) {
-    return this.store.listAssets(orgId);
+  async listAssets(orgId: string): Promise<Asset[]> {
+    return Promise.resolve(this.store.listAssets(orgId));
   }
 
-  getAsset(id: string) {
-    return this.store.getAsset(id);
+  async getAsset(id: string): Promise<Asset | undefined> {
+    return Promise.resolve(this.store.getAsset(id));
   }
 
   // ============ DEPRECIATION CALCULATIONS ============
-  calculateMonthlyDepreciation(asset: Asset): number {
+  async calculateMonthlyDepreciation(asset: Asset): Promise<number> {
     const depreciableAmount = asset.cost - asset.salvageValue;
 
     switch (asset.depreciationMethod) {
@@ -65,7 +65,7 @@ export class DepreciationService {
       case "declining-balance":
         // Double declining balance rate
         const annualRate = (2 / (asset.usefulLifeMonths / 12)) * 100;
-        const entries = this.store.listDepreciationEntries(asset.id);
+        const entries = await Promise.resolve(this.store.listDepreciationEntries(asset.id));
         const accumulated = entries.length > 0 ? entries[entries.length - 1].accumulatedDepreciation : 0;
         const bookValue = asset.cost - accumulated;
         const yearlyDep = bookValue * (annualRate / 100);
@@ -80,8 +80,8 @@ export class DepreciationService {
     }
   }
 
-  getDepreciationSchedule(assetId: string): DepreciationEntry[] {
-    return this.store.listDepreciationEntries(assetId);
+  async getDepreciationSchedule(assetId: string): Promise<DepreciationEntry[]> {
+    return Promise.resolve(this.store.listDepreciationEntries(assetId));
   }
 
   generateSchedule(asset: Asset): DepreciationEntry[] {
@@ -127,19 +127,19 @@ export class DepreciationService {
   }
 
   // ============ RECORD DEPRECIATION ============
-  recordMonthlyDepreciation(assetId: string, period: string, actorId: string): DepreciationEntry {
-    const asset = this.store.getAsset(assetId);
+  async recordMonthlyDepreciation(assetId: string, period: string, actorId: string): Promise<DepreciationEntry> {
+    const asset = await Promise.resolve(this.store.getAsset(assetId));
     if (!asset) throw new Error("Asset not found");
     if (!asset.isActive) throw new Error("Asset is not active");
 
     // Check if already recorded for this period
-    const existing = this.store.listDepreciationEntries(assetId);
+    const existing = await Promise.resolve(this.store.listDepreciationEntries(assetId));
     if (existing.find((e) => e.period === period)) {
       throw new Error(`Depreciation already recorded for ${period}`);
     }
 
     const accumulated = existing.length > 0 ? existing[existing.length - 1].accumulatedDepreciation : 0;
-    const amount = this.calculateMonthlyDepreciation(asset);
+    const amount = await this.calculateMonthlyDepreciation(asset);
 
     if (amount <= 0) {
       throw new Error("Asset fully depreciated");
@@ -156,7 +156,7 @@ export class DepreciationService {
     };
 
     // Create journal entry
-    const journal = this.ledger.draft({
+    const journal = await this.ledger.draft({
       orgId: asset.orgId,
       period,
       lines: [
@@ -183,34 +183,41 @@ export class DepreciationService {
     });
 
     entry.journalId = journal.id;
-    this.store.addDepreciationEntry(entry);
+    await Promise.resolve(this.store.addDepreciationEntry(entry));
 
     return entry;
   }
 
   // ============ REPORTS ============
-  assetRegister(orgId: string) {
-    const assets = this.store.listAssets(orgId);
+  async assetRegister(orgId: string) {
+    const assets = await Promise.resolve(this.store.listAssets(orgId));
 
-    return assets.map((asset) => {
-      const entries = this.store.listDepreciationEntries(asset.id);
+    const results = [];
+    for (const asset of assets) {
+      const entries = await Promise.resolve(this.store.listDepreciationEntries(asset.id));
       const accumulated = entries.length > 0 ? entries[entries.length - 1].accumulatedDepreciation : 0;
 
-      return {
+      results.push({
         ...asset,
         accumulatedDepreciation: accumulated,
         bookValue: asset.cost - accumulated,
         remainingLife: Math.max(0, asset.usefulLifeMonths - entries.length)
-      };
-    });
+      });
+    }
+
+    return results;
   }
 
-  depreciationSummary(orgId: string, period: string) {
-    const assets = this.store.listAssets(orgId).filter((a) => a.isActive);
+  async depreciationSummary(orgId: string, period: string) {
+    const allAssets = await Promise.resolve(this.store.listAssets(orgId));
+    const assets = allAssets.filter((a) => a.isActive);
 
-    const entries = assets.flatMap((a) =>
-      this.store.listDepreciationEntries(a.id).filter((e) => e.period === period)
-    );
+    const entries = [];
+    for (const a of assets) {
+      const assetEntries = await Promise.resolve(this.store.listDepreciationEntries(a.id));
+      const periodEntries = assetEntries.filter((e) => e.period === period);
+      entries.push(...periodEntries);
+    }
 
     return {
       period,

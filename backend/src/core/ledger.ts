@@ -1,5 +1,6 @@
 import { AuditLogService } from "./security/auditLog";
 import { JournalEntry, JournalLine, JournalStatus } from "./types";
+import { IStore } from "./store.interface";
 import { newId } from "../utils/id";
 
 interface DraftLineInput {
@@ -26,7 +27,7 @@ export interface DraftInput {
 }
 
 export class LedgerService {
-  constructor(private store: any, private audit: AuditLogService) {}
+  constructor(private store: IStore, private audit: AuditLogService) {}
 
   private validateLines(lines: JournalLine[]) {
     const debit = lines.reduce((sum, l) => sum + l.debit, 0);
@@ -39,7 +40,7 @@ export class LedgerService {
     }
   }
 
-  createDraft(input: DraftInput) {
+  async createDraft(input: DraftInput): Promise<JournalEntry> {
     // Ensure all lines have IDs
     const linesWithIds: JournalLine[] = input.lines.map(line => ({
       ...line,
@@ -55,8 +56,8 @@ export class LedgerService {
       ...input,
       lines: linesWithIds
     };
-    this.store.addJournal(journal);
-    this.audit.record({
+    await Promise.resolve(this.store.addJournal(journal));
+    await this.audit.record({
       orgId: input.orgId,
       actorId: input.createdBy,
       action: "journal.create",
@@ -68,60 +69,64 @@ export class LedgerService {
   }
 
   // Alias for createDraft - used by payroll/depreciation modules
-  draft(input: DraftInput) {
+  async draft(input: DraftInput): Promise<JournalEntry> {
     return this.createDraft(input);
   }
 
-  review(id: string, reviewerId: string) {
-    const journal = this.store.getJournal(id);
+  async review(id: string, reviewerId: string): Promise<JournalEntry> {
+    const journal = await Promise.resolve(this.store.getJournal(id));
     if (!journal) throw new Error("Journal not found");
     if (journal.status !== "draft") throw new Error("Only draft journals can be reviewed");
     if (journal.createdBy === reviewerId) {
       throw new Error("Separation of duties enforced: different reviewer required");
     }
-    const updated = this.store.updateJournal(id, {
+    await Promise.resolve(this.store.updateJournal(id, {
       status: "reviewed" as JournalStatus,
       reviewedBy: reviewerId
-    });
-    this.audit.record({
+    }));
+    const updated = await Promise.resolve(this.store.getJournal(id));
+    await this.audit.record({
       orgId: journal.orgId,
       actorId: reviewerId,
       action: "journal.review",
       entity: "journal",
       entityId: journal.id,
-      before: journal,
-      after: updated
+      before: journal as unknown as Record<string, unknown>,
+      after: updated as unknown as Record<string, unknown>
     });
-    return updated;
+    return updated!;
   }
 
-  post(id: string, posterId: string) {
-    const journal = this.store.getJournal(id);
+  async post(id: string, posterId: string): Promise<JournalEntry> {
+    const journal = await Promise.resolve(this.store.getJournal(id));
     if (!journal) throw new Error("Journal not found");
     if (journal.status !== "reviewed") throw new Error("Only reviewed journals can be posted");
-    if (this.store.isPeriodLocked(journal.orgId, journal.period)) {
+    const isLocked = await Promise.resolve(this.store.isPeriodLocked(journal.orgId, journal.period));
+    if (isLocked) {
       throw new Error("Period is locked");
     }
-    const updated = this.store.updateJournal(id, {
+    await Promise.resolve(this.store.updateJournal(id, {
       status: "posted" as JournalStatus,
       postedBy: posterId
-    });
-    this.audit.record({
+    }));
+    const updated = await Promise.resolve(this.store.getJournal(id));
+    await this.audit.record({
       orgId: journal.orgId,
       actorId: posterId,
       action: "journal.post",
       entity: "journal",
       entityId: journal.id,
-      before: journal,
-      after: updated
+      before: journal as unknown as Record<string, unknown>,
+      after: updated as unknown as Record<string, unknown>
     });
-    return updated;
+    return updated!;
   }
 
-  lockPeriod(orgId: string, period: string, lockedBy: string) {
-    if (this.store.isPeriodLocked(orgId, period)) return;
-    this.store.lockPeriod({ orgId, period, lockedBy, lockedAt: new Date().toISOString() });
-    this.audit.record({
+  async lockPeriod(orgId: string, period: string, lockedBy: string): Promise<void> {
+    const isLocked = await Promise.resolve(this.store.isPeriodLocked(orgId, period));
+    if (isLocked) return;
+    await Promise.resolve(this.store.lockPeriod({ orgId, period, lockedBy, lockedAt: new Date().toISOString() }));
+    await this.audit.record({
       orgId,
       actorId: lockedBy,
       action: "period.lock",
@@ -130,13 +135,12 @@ export class LedgerService {
     });
   }
 
-  balances(orgId: string, period?: string) {
-    const posted = this.store
-      .listJournals(orgId)
-      .filter((j) => j.status === "posted" && (!period || j.period === period));
+  async balances(orgId: string, period?: string): Promise<Map<string, number>> {
+    const journals = await Promise.resolve(this.store.listJournals(orgId));
+    const posted = journals.filter((j: JournalEntry) => j.status === "posted" && (!period || j.period === period));
 
     const balances = new Map<string, number>();
-    posted.forEach((j) => {
+    posted.forEach((j: JournalEntry) => {
       j.lines.forEach((l) => {
         const current = balances.get(l.accountId) ?? 0;
         balances.set(l.accountId, current + l.debit - l.credit);
@@ -145,8 +149,8 @@ export class LedgerService {
     return balances;
   }
 
-  list(orgId: string) {
-    return this.store.listJournals(orgId);
+  async list(orgId: string): Promise<JournalEntry[]> {
+    return Promise.resolve(this.store.listJournals(orgId));
   }
 }
 

@@ -1,4 +1,4 @@
-import { DbStore } from "../store.db";
+import { IStore } from "../store.interface";
 import { ReportingService } from "../reporting";
 
 interface RatioResult {
@@ -10,11 +10,11 @@ interface RatioResult {
 }
 
 export class RatioService {
-  constructor(private store: DbStore, private reporting: ReportingService) {}
+  constructor(private store: IStore, private reporting: ReportingService) {}
 
   // ============ LIQUIDITY RATIOS ============
-  currentRatio(orgId: string, period?: string): RatioResult {
-    const bs = this.reporting.balanceSheet(orgId, period);
+  async currentRatio(orgId: string, period?: string): Promise<RatioResult> {
+    const bs = await this.reporting.balanceSheet(orgId, period);
     const currentAssets = bs.totals.assets;
     const currentLiabilities = bs.totals.liabilities;
 
@@ -29,8 +29,8 @@ export class RatioService {
     };
   }
 
-  quickRatio(orgId: string, period?: string): RatioResult {
-    const bs = this.reporting.balanceSheet(orgId, period);
+  async quickRatio(orgId: string, period?: string): Promise<RatioResult> {
+    const bs = await this.reporting.balanceSheet(orgId, period);
     // Simplified: assume 80% of assets are quick assets (cash + receivables)
     const quickAssets = bs.totals.assets * 0.8;
     const currentLiabilities = bs.totals.liabilities;
@@ -46,8 +46,8 @@ export class RatioService {
     };
   }
 
-  cashRatio(orgId: string, period?: string): RatioResult {
-    const bs = this.reporting.balanceSheet(orgId, period);
+  async cashRatio(orgId: string, period?: string): Promise<RatioResult> {
+    const bs = await this.reporting.balanceSheet(orgId, period);
     // Simplified: assume 30% of assets are cash
     const cash = bs.totals.assets * 0.3;
     const currentLiabilities = bs.totals.liabilities;
@@ -64,8 +64,8 @@ export class RatioService {
   }
 
   // ============ PROFITABILITY RATIOS ============
-  grossMargin(orgId: string, period?: string): RatioResult {
-    const is = this.reporting.incomeStatement(orgId, period);
+  async grossMargin(orgId: string, period?: string): Promise<RatioResult> {
+    const is = await this.reporting.incomeStatement(orgId, period);
     const revenue = is.totals.revenue;
     const cogs = is.totals.expenses * 0.6; // Simplified: assume 60% of expenses are COGS
 
@@ -81,8 +81,8 @@ export class RatioService {
     };
   }
 
-  netProfitMargin(orgId: string, period?: string): RatioResult {
-    const is = this.reporting.incomeStatement(orgId, period);
+  async netProfitMargin(orgId: string, period?: string): Promise<RatioResult> {
+    const is = await this.reporting.incomeStatement(orgId, period);
     const revenue = is.totals.revenue;
     const netIncome = is.totals.netIncome;
 
@@ -97,8 +97,8 @@ export class RatioService {
     };
   }
 
-  operatingMargin(orgId: string, period?: string): RatioResult {
-    const is = this.reporting.incomeStatement(orgId, period);
+  async operatingMargin(orgId: string, period?: string): Promise<RatioResult> {
+    const is = await this.reporting.incomeStatement(orgId, period);
     const revenue = is.totals.revenue;
     const operatingExpenses = is.totals.expenses * 0.8; // Simplified
     const operatingIncome = revenue - operatingExpenses;
@@ -115,9 +115,9 @@ export class RatioService {
   }
 
   // ============ RETURN RATIOS ============
-  returnOnAssets(orgId: string, period?: string): RatioResult {
-    const bs = this.reporting.balanceSheet(orgId, period);
-    const is = this.reporting.incomeStatement(orgId, period);
+  async returnOnAssets(orgId: string, period?: string): Promise<RatioResult> {
+    const bs = await this.reporting.balanceSheet(orgId, period);
+    const is = await this.reporting.incomeStatement(orgId, period);
 
     const totalAssets = bs.totals.assets;
     const netIncome = is.totals.netIncome;
@@ -133,9 +133,9 @@ export class RatioService {
     };
   }
 
-  returnOnEquity(orgId: string, period?: string): RatioResult {
-    const bs = this.reporting.balanceSheet(orgId, period);
-    const is = this.reporting.incomeStatement(orgId, period);
+  async returnOnEquity(orgId: string, period?: string): Promise<RatioResult> {
+    const bs = await this.reporting.balanceSheet(orgId, period);
+    const is = await this.reporting.incomeStatement(orgId, period);
 
     const equity = bs.totals.equity;
     const netIncome = is.totals.netIncome;
@@ -152,8 +152,8 @@ export class RatioService {
   }
 
   // ============ LEVERAGE RATIOS ============
-  debtToEquity(orgId: string, period?: string): RatioResult {
-    const bs = this.reporting.balanceSheet(orgId, period);
+  async debtToEquity(orgId: string, period?: string): Promise<RatioResult> {
+    const bs = await this.reporting.balanceSheet(orgId, period);
     const totalDebt = bs.totals.liabilities;
     const equity = bs.totals.equity;
 
@@ -168,8 +168,8 @@ export class RatioService {
     };
   }
 
-  debtRatio(orgId: string, period?: string): RatioResult {
-    const bs = this.reporting.balanceSheet(orgId, period);
+  async debtRatio(orgId: string, period?: string): Promise<RatioResult> {
+    const bs = await this.reporting.balanceSheet(orgId, period);
     const totalDebt = bs.totals.liabilities;
     const totalAssets = bs.totals.assets;
 
@@ -185,9 +185,9 @@ export class RatioService {
   }
 
   // ============ EFFICIENCY RATIOS ============
-  assetTurnover(orgId: string, period?: string): RatioResult {
-    const bs = this.reporting.balanceSheet(orgId, period);
-    const is = this.reporting.incomeStatement(orgId, period);
+  async assetTurnover(orgId: string, period?: string): Promise<RatioResult> {
+    const bs = await this.reporting.balanceSheet(orgId, period);
+    const is = await this.reporting.incomeStatement(orgId, period);
 
     const revenue = is.totals.revenue;
     const totalAssets = bs.totals.assets;
@@ -204,8 +204,8 @@ export class RatioService {
   }
 
   // ============ DASHBOARD ============
-  allRatios(orgId: string, period?: string): RatioResult[] {
-    return [
+  async allRatios(orgId: string, period?: string): Promise<RatioResult[]> {
+    return Promise.all([
       // Liquidity
       this.currentRatio(orgId, period),
       this.quickRatio(orgId, period),
@@ -222,11 +222,11 @@ export class RatioService {
       this.debtRatio(orgId, period),
       // Efficiency
       this.assetTurnover(orgId, period)
-    ];
+    ]);
   }
 
-  dashboard(orgId: string, period?: string) {
-    const ratios = this.allRatios(orgId, period);
+  async dashboard(orgId: string, period?: string) {
+    const ratios = await this.allRatios(orgId, period);
 
     const good = ratios.filter((r) => r.status === "good").length;
     const warning = ratios.filter((r) => r.status === "warning").length;
@@ -245,13 +245,14 @@ export class RatioService {
     };
   }
 
-  trend(orgId: string, periods: string[]) {
-    return periods.map((period) => ({
-      period,
-      ratios: this.allRatios(orgId, period)
-    }));
+  async trend(orgId: string, periods: string[]) {
+    const results = [];
+    for (const period of periods) {
+      results.push({
+        period,
+        ratios: await this.allRatios(orgId, period)
+      });
+    }
+    return results;
   }
 }
-
-
-

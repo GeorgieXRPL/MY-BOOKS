@@ -1,7 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import { InvoiceService } from "../core/invoices";
-import { DbStore } from "../core/store.db";
+import { IStore } from "../core/store.interface";
 import { OCRService, SUPPORTED_MIME_TYPES } from "../core/ocr";
 import { newId } from "../utils/id";
 import { AuthenticatedRequest } from "../middleware/auth";
@@ -23,18 +23,18 @@ const upload = multer({
 
 export const buildInvoicesRouter = (
   invoices: InvoiceService, 
-  store: any,
+  store: IStore,
   ocrService?: OCRService
 ) => {
   const router = Router();
 
   // List invoices
-  router.get("/", (req, res) => {
+  router.get("/", async (req, res) => {
     try {
       const orgId = (req.query.orgId as string) || "demo-org";
       const type = req.query.type as "receivable" | "payable" | undefined;
       const status = req.query.status as any;
-      const list = invoices.list(orgId, { type, status });
+      const list = await invoices.list(orgId, { type, status });
       res.json(list);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
@@ -42,9 +42,9 @@ export const buildInvoicesRouter = (
   });
 
   // Get single invoice
-  router.get("/:id", (req, res) => {
+  router.get("/:id", async (req, res) => {
     try {
-      const invoice = invoices.get(req.params.id);
+      const invoice = await invoices.get(req.params.id);
       if (!invoice) return res.status(404).json({ error: "Not found" });
       res.json(invoice);
     } catch (e: any) {
@@ -53,10 +53,10 @@ export const buildInvoicesRouter = (
   });
 
   // Create invoice
-  router.post("/", (req, res) => {
+  router.post("/", async (req, res) => {
     try {
       const actorId = (req as any).user?.sub || "unknown";
-      const invoice = invoices.create({
+      const invoice = await invoices.create({
         ...req.body,
         createdBy: actorId
       });
@@ -67,11 +67,11 @@ export const buildInvoicesRouter = (
   });
 
   // Update status
-  router.patch("/:id/status", (req, res) => {
+  router.patch("/:id/status", async (req, res) => {
     try {
       const actorId = (req as any).user?.sub || "unknown";
       const { status } = req.body;
-      const invoice = invoices.updateStatus(req.params.id, status, actorId);
+      const invoice = await invoices.updateStatus(req.params.id, status, actorId);
       res.json(invoice);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
@@ -79,11 +79,11 @@ export const buildInvoicesRouter = (
   });
 
   // Mark paid
-  router.post("/:id/pay", (req, res) => {
+  router.post("/:id/pay", async (req, res) => {
     try {
       const actorId = (req as any).user?.sub || "unknown";
       const { paidAmount } = req.body;
-      const invoice = invoices.markPaid(req.params.id, paidAmount, actorId);
+      const invoice = await invoices.markPaid(req.params.id, paidAmount, actorId);
       res.json(invoice);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
@@ -91,11 +91,11 @@ export const buildInvoicesRouter = (
   });
 
   // Aging report
-  router.get("/reports/aging", (req, res) => {
+  router.get("/reports/aging", async (req, res) => {
     try {
       const orgId = (req.query.orgId as string) || "demo-org";
       const type = (req.query.type as "receivable" | "payable") || "receivable";
-      const report = invoices.agingReport(orgId, type);
+      const report = await invoices.agingReport(orgId, type);
       res.json(report);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
@@ -103,23 +103,24 @@ export const buildInvoicesRouter = (
   });
 
   // Counterparties
-  router.get("/counterparties", (req, res) => {
+  router.get("/counterparties", async (req, res) => {
     try {
       const orgId = (req.query.orgId as string) || "demo-org";
-      res.json(store.listCounterparties(orgId));
+      const list = await Promise.resolve(store.listCounterparties(orgId));
+      res.json(list);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
     }
   });
 
-  router.post("/counterparties", (req, res) => {
+  router.post("/counterparties", async (req, res) => {
     try {
-      const cp = store.addCounterparty({
+      await Promise.resolve(store.addCounterparty({
         ...req.body,
         id: newId(),
         createdAt: new Date().toISOString()
-      });
-      res.status(201).json(cp);
+      }));
+      res.status(201).json({ success: true });
     } catch (e: any) {
       res.status(400).json({ error: e.message });
     }
@@ -197,7 +198,7 @@ export const buildInvoicesRouter = (
     }
 
     try {
-      const invoice = ocrService.createInvoiceFromExtracted(extracted, {
+      const invoice = await ocrService.createInvoiceFromExtracted(extracted, {
         orgId,
         userId: req.user?.id || "unknown",
         invoiceType: invoiceType || "payable",

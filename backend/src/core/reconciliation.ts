@@ -1,4 +1,5 @@
 import { ReconciliationItem } from "./types";
+import { IStore } from "./store.interface";
 
 interface ReconInput {
   orgId: string;
@@ -10,16 +11,19 @@ interface ReconInput {
 }
 
 export class ReconciliationService {
-  constructor(private store: any) {}
+  constructor(private store: IStore) {}
 
-  reconcile(input: ReconInput): ReconciliationItem {
+  async reconcile(input: ReconInput): Promise<ReconciliationItem> {
     const delta = input.externalBalance - input.ledgerBalance;
     const status = Math.abs(delta) < 0.0001 ? "matched" : "unmatched";
-    return this.store.addReconciliation({ ...input, delta, status });
+    await Promise.resolve(this.store.addReconciliation({ ...input, delta, status }));
+    // Return the item (addReconciliation doesn't return the created item, so we reconstruct)
+    const items = await Promise.resolve(this.store.listReconciliations(input.orgId));
+    return items[items.length - 1];
   }
 
-  list(orgId: string) {
-    return this.store.listReconciliations(orgId);
+  async list(orgId: string): Promise<ReconciliationItem[]> {
+    return Promise.resolve(this.store.listReconciliations(orgId));
   }
 }
 

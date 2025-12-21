@@ -1,6 +1,7 @@
 import { LedgerService } from "../ledger";
 import { PricingService } from "./pricing";
-import { JournalLine, NormalizedTxn } from "../types";
+import { IStore } from "../store.interface";
+import { Account, JournalEntry, JournalLine, NormalizedTxn } from "../types";
 import { newId } from "../../utils/id";
 
 export interface WalletTransfer {
@@ -17,32 +18,32 @@ export interface WalletTransfer {
 
 export class WalletIngestor {
   constructor(
-    private store: any,
+    private store: IStore,
     private pricing: PricingService,
     private ledger: LedgerService
   ) {}
 
-  private findAccount(orgId: string, nameIncludes: string) {
-    return this.store
-      .listAccounts(orgId)
-      .find((a) => a.name.toLowerCase().includes(nameIncludes.toLowerCase()));
+  private async findAccount(orgId: string, nameIncludes: string): Promise<Account | undefined> {
+    const accounts = await Promise.resolve(this.store.listAccounts(orgId));
+    return accounts.find((a: Account) => a.name.toLowerCase().includes(nameIncludes.toLowerCase()));
   }
 
-  private alreadyIngested(hash: string) {
-    return this.store.listJournals("demo-org").some((j: any) => j.externalRef === hash);
+  private async alreadyIngested(hash: string): Promise<boolean> {
+    const journals = await Promise.resolve(this.store.listJournals("demo-org"));
+    return journals.some((j: JournalEntry) => j.externalRef === hash);
   }
 
-  async ingest(transfers: WalletTransfer[], actorId: string, period: string) {
+  async ingest(transfers: WalletTransfer[], actorId: string, period: string): Promise<NormalizedTxn[]> {
     const results: NormalizedTxn[] = [];
     for (const t of transfers) {
-      if (this.alreadyIngested(t.hash)) continue;
+      if (await this.alreadyIngested(t.hash)) continue;
       const amountAbs = Math.abs(t.value);
       const usdValue = await this.pricing.value(t.tokenSymbol, amountAbs, "USD");
       const direction = t.value >= 0 ? "inflow" : "outflow";
-      const asset = this.findAccount(t.orgId, "Crypto Assets - Treasury") ??
-        this.findAccount(t.orgId, "Crypto Assets");
-      const revenue = this.findAccount(t.orgId, "Revenue");
-      const expense = this.findAccount(t.orgId, "Operating Expenses");
+      const asset = await this.findAccount(t.orgId, "Crypto Assets - Treasury") ??
+        await this.findAccount(t.orgId, "Crypto Assets");
+      const revenue = await this.findAccount(t.orgId, "Revenue");
+      const expense = await this.findAccount(t.orgId, "Operating Expenses");
       if (!asset || !revenue || !expense) {
         throw new Error("Required accounts not found in COA");
       }
@@ -101,7 +102,7 @@ export class WalletIngestor {
       }
 
       if (t.gasFee && t.gasFee > 0) {
-        const gas = this.findAccount(t.orgId, "Gas/Network Fees") ?? expense;
+        const gas = await this.findAccount(t.orgId, "Gas/Network Fees") ?? expense;
         lines.push({
           id: newId(),
           accountId: gas.id,
@@ -126,7 +127,7 @@ export class WalletIngestor {
         });
       }
 
-      this.ledger.createDraft({
+      await this.ledger.createDraft({
         orgId: t.orgId,
         period,
         lines,

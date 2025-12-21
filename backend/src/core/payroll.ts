@@ -1,5 +1,5 @@
-import { DbStore } from "./store.db";
-import { Employee, PayrollRun, PayrollLine, PayrollStatus } from "./types";
+import { IStore } from "./store.interface";
+import { Employee, PayrollRun, PayrollLine, PayrollStatus, Account } from "./types";
 import { newId } from "../utils/id";
 import { AuditLogService } from "./security/auditLog";
 import { LedgerService } from "./ledger";
@@ -13,29 +13,30 @@ interface CreatePayrollInput {
 
 export class PayrollService {
   constructor(
-    private store: DbStore,
+    private store: IStore,
     private audit: AuditLogService,
     private ledger: LedgerService
   ) {}
 
   // ============ EMPLOYEES ============
-  addEmployee(emp: Omit<Employee, "id">) {
+  async addEmployee(emp: Omit<Employee, "id">): Promise<Employee> {
     const employee: Employee = { ...emp, id: newId() };
-    this.store.addEmployee(employee);
+    await Promise.resolve(this.store.addEmployee(employee));
     return employee;
   }
 
-  listEmployees(orgId: string) {
-    return this.store.listEmployees(orgId);
+  async listEmployees(orgId: string): Promise<Employee[]> {
+    return Promise.resolve(this.store.listEmployees(orgId));
   }
 
-  getEmployee(id: string) {
-    return this.store.getEmployee(id);
+  async getEmployee(id: string): Promise<Employee | undefined> {
+    return Promise.resolve(this.store.getEmployee(id));
   }
 
   // ============ PAYROLL RUNS ============
-  createRun(input: CreatePayrollInput): PayrollRun {
-    const employees = this.store.listEmployees(input.orgId).filter((e) => e.isActive);
+  async createRun(input: CreatePayrollInput): Promise<PayrollRun> {
+    const allEmployees = await Promise.resolve(this.store.listEmployees(input.orgId));
+    const employees = allEmployees.filter((e) => e.isActive);
 
     const lines: PayrollLine[] = employees.map((emp) => ({
       id: newId(),
@@ -63,8 +64,8 @@ export class PayrollService {
       updatedAt: new Date().toISOString()
     };
 
-    this.store.addPayrollRun(run);
-    this.audit.log({
+    await Promise.resolve(this.store.addPayrollRun(run));
+    await this.audit.log({
       orgId: input.orgId,
       actorId: input.createdBy,
       action: "create",
@@ -75,16 +76,16 @@ export class PayrollService {
     return run;
   }
 
-  get(id: string) {
-    return this.store.getPayrollRun(id);
+  async get(id: string): Promise<PayrollRun | undefined> {
+    return Promise.resolve(this.store.getPayrollRun(id));
   }
 
-  list(orgId: string) {
-    return this.store.listPayrollRuns(orgId);
+  async list(orgId: string): Promise<PayrollRun[]> {
+    return Promise.resolve(this.store.listPayrollRuns(orgId));
   }
 
-  calculateTaxes(id: string, taxRate: number, actorId: string): PayrollRun {
-    const run = this.store.getPayrollRun(id);
+  async calculateTaxes(id: string, taxRate: number, actorId: string): Promise<PayrollRun> {
+    const run = await Promise.resolve(this.store.getPayrollRun(id));
     if (!run) throw new Error("PayrollRun not found");
     if (run.status !== "draft") throw new Error("Can only calculate taxes for draft runs");
 
@@ -97,14 +98,15 @@ export class PayrollService {
       };
     });
 
-    const updated = this.store.updatePayrollRun(id, {
+    await Promise.resolve(this.store.updatePayrollRun(id, {
       lines,
       totalTax: lines.reduce((s, l) => s + l.taxWithholding, 0),
       totalNet: lines.reduce((s, l) => s + l.netPay, 0),
       status: "calculated"
-    });
+    }));
+    const updated = await Promise.resolve(this.store.getPayrollRun(id));
 
-    this.audit.log({
+    await this.audit.log({
       orgId: run.orgId,
       actorId,
       action: "calculate_taxes",
@@ -113,21 +115,22 @@ export class PayrollService {
       metadata: { taxRate }
     });
 
-    return updated;
+    return updated!;
   }
 
-  approve(id: string, actorId: string): PayrollRun {
-    const run = this.store.getPayrollRun(id);
+  async approve(id: string, actorId: string): Promise<PayrollRun> {
+    const run = await Promise.resolve(this.store.getPayrollRun(id));
     if (!run) throw new Error("PayrollRun not found");
     if (run.status !== "calculated") throw new Error("Can only approve calculated runs");
 
-    const updated = this.store.updatePayrollRun(id, {
+    await Promise.resolve(this.store.updatePayrollRun(id, {
       status: "approved",
       approvedBy: actorId,
       approvedAt: new Date().toISOString()
-    });
+    }));
+    const updated = await Promise.resolve(this.store.getPayrollRun(id));
 
-    this.audit.log({
+    await this.audit.log({
       orgId: run.orgId,
       actorId,
       action: "approve",
@@ -135,19 +138,19 @@ export class PayrollService {
       entityId: id
     });
 
-    return updated;
+    return updated!;
   }
 
-  finalize(id: string, actorId: string): PayrollRun {
-    const run = this.store.getPayrollRun(id);
+  async finalize(id: string, actorId: string): Promise<PayrollRun> {
+    const run = await Promise.resolve(this.store.getPayrollRun(id));
     if (!run) throw new Error("PayrollRun not found");
     if (run.status !== "approved") throw new Error("Can only finalize approved runs");
 
     // Create journal entries for payroll
-    const accounts = this.store.listAccounts(run.orgId);
-    const salaryExpenseAccount = accounts.find((a) => a.name.toLowerCase().includes("salary"));
-    const taxPayableAccount = accounts.find((a) => a.name.toLowerCase().includes("tax payable"));
-    const cashAccount = accounts.find((a) => a.name.toLowerCase().includes("cash") || a.name.toLowerCase().includes("bank"));
+    const accounts = await Promise.resolve(this.store.listAccounts(run.orgId));
+    const salaryExpenseAccount = accounts.find((a: Account) => a.name.toLowerCase().includes("salary"));
+    const taxPayableAccount = accounts.find((a: Account) => a.name.toLowerCase().includes("tax payable"));
+    const cashAccount = accounts.find((a: Account) => a.name.toLowerCase().includes("cash") || a.name.toLowerCase().includes("bank"));
 
     if (salaryExpenseAccount && cashAccount) {
       const journalLines = [
@@ -180,7 +183,7 @@ export class PayrollService {
         });
       }
 
-      this.ledger.draft({
+      await this.ledger.draft({
         orgId: run.orgId,
         period: run.period,
         lines: journalLines,
@@ -190,13 +193,14 @@ export class PayrollService {
       });
     }
 
-    const updated = this.store.updatePayrollRun(id, {
+    await Promise.resolve(this.store.updatePayrollRun(id, {
       status: "finalized",
       finalizedBy: actorId,
       finalizedAt: new Date().toISOString()
-    });
+    }));
+    const updated = await Promise.resolve(this.store.getPayrollRun(id));
 
-    this.audit.log({
+    await this.audit.log({
       orgId: run.orgId,
       actorId,
       action: "finalize",
@@ -204,11 +208,12 @@ export class PayrollService {
       entityId: id
     });
 
-    return updated;
+    return updated!;
   }
 
-  summary(orgId: string, year: string) {
-    const runs = this.store.listPayrollRuns(orgId).filter((r) => r.period.startsWith(year) && r.status === "finalized");
+  async summary(orgId: string, year: string) {
+    const allRuns = await Promise.resolve(this.store.listPayrollRuns(orgId));
+    const runs = allRuns.filter((r) => r.period.startsWith(year) && r.status === "finalized");
 
     return {
       totalGross: runs.reduce((s, r) => s + r.totalGross, 0),

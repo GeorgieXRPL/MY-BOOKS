@@ -1,15 +1,16 @@
 import { NormalizedTxn, TreasuryPolicy } from "./types";
+import { IStore } from "./store.interface";
 
 export class ControlsService {
-  constructor(private store: any) {}
+  constructor(private store: IStore) {}
 
-  setPolicy(orgId: string, policy: TreasuryPolicy) {
-    this.store.setPolicy(orgId, policy);
+  async setPolicy(orgId: string, policy: TreasuryPolicy): Promise<TreasuryPolicy> {
+    await Promise.resolve(this.store.setPolicy(orgId, policy));
     return policy;
   }
 
-  evaluate(orgId: string, tx: NormalizedTxn) {
-    const policy = this.store.getPolicy(orgId);
+  async evaluate(orgId: string, tx: NormalizedTxn): Promise<{ ok: boolean; issues: string[] }> {
+    const policy = await Promise.resolve(this.store.getPolicy(orgId));
     if (!policy) return { ok: true, issues: [] as string[] };
 
     const issues: string[] = [];

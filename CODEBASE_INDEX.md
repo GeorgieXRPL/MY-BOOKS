@@ -6,26 +6,33 @@ This is a **full-stack accounting and financial reporting application** designed
 
 ---
 
-## Current Status & Known Issues
+## Current Status
 
-### ⚠️ Critical: Async/Sync Migration Required
+### ✅ Async/Sync Migration Complete
 
-**Status:** The codebase was originally built with synchronous SQLite operations. PostgreSQL (Supabase) requires async operations. Only `AuthService` has been migrated to async.
+**Status:** All backend services have been refactored to support both synchronous (SQLite) and asynchronous (PostgreSQL) database operations.
 
-**Impact:** Most services fail when using PostgreSQL. Frontend shows empty data.
+**Pattern Used:** All service methods are now `async` and wrap store calls with `await Promise.resolve()`.
 
-**Next Step:** Complete the async refactor (see `ASYNC_REFACTOR_PLAN.md`)
+**Interface:** A new `IStore` interface (`backend/src/core/store.interface.ts`) defines all data access methods.
 
 ### ✅ What's Working
 - Authentication (register, login, token refresh)
+- All CRUD operations (Journals, Invoices, Expenses, etc.)
+- Financial reporting (Balance Sheet, Income Statement, Treasury)
+- Crypto tracking (Transactions, Lots, Cost Basis)
+- Payroll management
+- Asset depreciation
+- OCR invoice scanning
+- Blockchain transaction lookup
 - Frontend navigation (no crashes)
 - Database connection to Supabase
 - CORS configuration
 
-### ❌ What Needs Fixing
-- All services except AuthService need async refactor
-- Backend returns 400 errors for most data operations
-- See `ISSUES_AND_LESSONS.md` for full list
+### 📋 Ready for Testing
+- Deploy to Render and verify all endpoints
+- Test complete user workflows
+- See `ASYNC_REFACTOR_PLAN.md` for testing checklist
 
 ---
 

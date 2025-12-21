@@ -5,18 +5,19 @@ export const buildPayrollRouter = (payroll: PayrollService) => {
   const router = Router();
 
   // ============ EMPLOYEES ============
-  router.get("/employees", (req, res) => {
+  router.get("/employees", async (req, res) => {
     try {
       const orgId = (req.query.orgId as string) || "demo-org";
-      res.json(payroll.listEmployees(orgId));
+      const list = await payroll.listEmployees(orgId);
+      res.json(list);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
     }
   });
 
-  router.get("/employees/:id", (req, res) => {
+  router.get("/employees/:id", async (req, res) => {
     try {
-      const employee = payroll.getEmployee(req.params.id);
+      const employee = await payroll.getEmployee(req.params.id);
       if (!employee) return res.status(404).json({ error: "Not found" });
       res.json(employee);
     } catch (e: any) {
@@ -24,9 +25,9 @@ export const buildPayrollRouter = (payroll: PayrollService) => {
     }
   });
 
-  router.post("/employees", (req, res) => {
+  router.post("/employees", async (req, res) => {
     try {
-      const employee = payroll.addEmployee(req.body);
+      const employee = await payroll.addEmployee(req.body);
       res.status(201).json(employee);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
@@ -34,18 +35,19 @@ export const buildPayrollRouter = (payroll: PayrollService) => {
   });
 
   // ============ PAYROLL RUNS ============
-  router.get("/runs", (req, res) => {
+  router.get("/runs", async (req, res) => {
     try {
       const orgId = (req.query.orgId as string) || "demo-org";
-      res.json(payroll.list(orgId));
+      const list = await payroll.list(orgId);
+      res.json(list);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
     }
   });
 
-  router.get("/runs/:id", (req, res) => {
+  router.get("/runs/:id", async (req, res) => {
     try {
-      const run = payroll.get(req.params.id);
+      const run = await payroll.get(req.params.id);
       if (!run) return res.status(404).json({ error: "Not found" });
       res.json(run);
     } catch (e: any) {
@@ -53,10 +55,10 @@ export const buildPayrollRouter = (payroll: PayrollService) => {
     }
   });
 
-  router.post("/runs", (req, res) => {
+  router.post("/runs", async (req, res) => {
     try {
       const actorId = (req as any).user?.sub || "unknown";
-      const run = payroll.createRun({
+      const run = await payroll.createRun({
         ...req.body,
         createdBy: actorId
       });
@@ -66,31 +68,31 @@ export const buildPayrollRouter = (payroll: PayrollService) => {
     }
   });
 
-  router.post("/runs/:id/calculate", (req, res) => {
+  router.post("/runs/:id/calculate", async (req, res) => {
     try {
       const actorId = (req as any).user?.sub || "unknown";
       const { taxRate } = req.body;
-      const run = payroll.calculateTaxes(req.params.id, taxRate || 20, actorId);
+      const run = await payroll.calculateTaxes(req.params.id, taxRate || 20, actorId);
       res.json(run);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
     }
   });
 
-  router.post("/runs/:id/approve", (req, res) => {
+  router.post("/runs/:id/approve", async (req, res) => {
     try {
       const actorId = (req as any).user?.sub || "unknown";
-      const run = payroll.approve(req.params.id, actorId);
+      const run = await payroll.approve(req.params.id, actorId);
       res.json(run);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
     }
   });
 
-  router.post("/runs/:id/finalize", (req, res) => {
+  router.post("/runs/:id/finalize", async (req, res) => {
     try {
       const actorId = (req as any).user?.sub || "unknown";
-      const run = payroll.finalize(req.params.id, actorId);
+      const run = await payroll.finalize(req.params.id, actorId);
       res.json(run);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
@@ -98,10 +100,10 @@ export const buildPayrollRouter = (payroll: PayrollService) => {
   });
 
   // Summary
-  router.get("/summary/:year", (req, res) => {
+  router.get("/summary/:year", async (req, res) => {
     try {
       const orgId = (req.query.orgId as string) || "demo-org";
-      const summary = payroll.summary(orgId, req.params.year);
+      const summary = await payroll.summary(orgId, req.params.year);
       res.json(summary);
     } catch (e: any) {
       res.status(400).json({ error: e.message });

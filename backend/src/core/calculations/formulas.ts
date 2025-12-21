@@ -1,4 +1,4 @@
-import { DbStore } from "../store.db";
+import { IStore } from "../store.interface";
 import { Formula } from "../types";
 import { newId } from "../../utils/id";
 import { ReportingService } from "../reporting";
@@ -14,10 +14,10 @@ interface FormulaResult {
 }
 
 export class FormulaService {
-  constructor(private store: DbStore, private reporting: ReportingService) {}
+  constructor(private store: IStore, private reporting: ReportingService) {}
 
   // ============ FORMULA CRUD ============
-  create(input: Omit<Formula, "id" | "createdAt" | "updatedAt">): Formula {
+  async create(input: Omit<Formula, "id" | "createdAt" | "updatedAt">): Promise<Formula> {
     const formula: Formula = {
       ...input,
       id: newId(),
@@ -28,24 +28,24 @@ export class FormulaService {
     // Validate expression
     this.validateExpression(formula.expression, formula.variables);
 
-    this.store.addFormula(formula);
+    await Promise.resolve(this.store.addFormula(formula));
     return formula;
   }
 
-  get(id: string) {
-    return this.store.getFormula(id);
+  async get(id: string): Promise<Formula | undefined> {
+    return Promise.resolve(this.store.getFormula(id));
   }
 
-  list(orgId: string, category?: string) {
-    let formulas = this.store.listFormulas(orgId);
+  async list(orgId: string, category?: string): Promise<Formula[]> {
+    let formulas = await Promise.resolve(this.store.listFormulas(orgId));
     if (category) {
       formulas = formulas.filter((f) => f.category === category);
     }
     return formulas;
   }
 
-  update(id: string, patch: Partial<Omit<Formula, "id" | "createdAt">>) {
-    const existing = this.store.getFormula(id);
+  async update(id: string, patch: Partial<Omit<Formula, "id" | "createdAt">>): Promise<Formula> {
+    const existing = await Promise.resolve(this.store.getFormula(id));
     if (!existing) throw new Error("Formula not found");
 
     if (patch.expression || patch.variables) {
@@ -61,7 +61,7 @@ export class FormulaService {
       updatedAt: new Date().toISOString()
     };
 
-    this.store.addFormula(updated);
+    await Promise.resolve(this.store.addFormula(updated));
     return updated;
   }
 
@@ -92,8 +92,8 @@ export class FormulaService {
   }
 
   // ============ EVALUATION ============
-  evaluate(formulaId: string, context: FormulaContext): FormulaResult {
-    const formula = this.store.getFormula(formulaId);
+  async evaluate(formulaId: string, context: FormulaContext): Promise<FormulaResult> {
+    const formula = await Promise.resolve(this.store.getFormula(formulaId));
     if (!formula) throw new Error("Formula not found");
 
     // Check all required variables are provided
@@ -141,9 +141,9 @@ export class FormulaService {
   }
 
   // ============ AUTO CONTEXT ============
-  buildContext(orgId: string, period?: string): FormulaContext {
-    const bs = this.reporting.balanceSheet(orgId, period);
-    const is = this.reporting.incomeStatement(orgId, period);
+  async buildContext(orgId: string, period?: string): Promise<FormulaContext> {
+    const bs = await this.reporting.balanceSheet(orgId, period);
+    const is = await this.reporting.incomeStatement(orgId, period);
 
     return {
       // Balance Sheet
@@ -162,17 +162,17 @@ export class FormulaService {
     };
   }
 
-  evaluateWithAutoContext(formulaId: string, orgId: string, period?: string, additionalContext?: FormulaContext): FormulaResult {
-    const autoContext = this.buildContext(orgId, period);
+  async evaluateWithAutoContext(formulaId: string, orgId: string, period?: string, additionalContext?: FormulaContext): Promise<FormulaResult> {
+    const autoContext = await this.buildContext(orgId, period);
     const fullContext = { ...autoContext, ...additionalContext };
 
     return this.evaluate(formulaId, fullContext);
   }
 
   // ============ BATCH EVALUATION ============
-  evaluateAll(orgId: string, period?: string): FormulaResult[] {
-    const formulas = this.store.listFormulas(orgId);
-    const context = this.buildContext(orgId, period);
+  async evaluateAll(orgId: string, period?: string): Promise<FormulaResult[]> {
+    const formulas = await Promise.resolve(this.store.listFormulas(orgId));
+    const context = await this.buildContext(orgId, period);
 
     const results: FormulaResult[] = [];
 
@@ -184,7 +184,7 @@ export class FormulaService {
           continue; // Skip formulas with missing variables
         }
 
-        const result = this.evaluate(formula.id, context);
+        const result = await this.evaluate(formula.id, context);
         results.push(result);
       } catch {
         // Skip formulas that fail
@@ -235,12 +235,12 @@ export class FormulaService {
     ];
   }
 
-  seedPresets(orgId: string, createdBy: string) {
+  async seedPresets(orgId: string, createdBy: string): Promise<Formula[]> {
     const presets = this.getPresetFormulas();
     const created: Formula[] = [];
 
     for (const preset of presets) {
-      const formula = this.create({
+      const formula = await this.create({
         ...preset,
         orgId,
         createdBy
@@ -251,6 +251,3 @@ export class FormulaService {
     return created;
   }
 }
-
-
-

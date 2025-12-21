@@ -27,7 +27,7 @@ export const buildReportingRouter = (
         return res.json(cached);
       }
       
-      const result = reporting.balanceSheet(orgId, typeof period === "string" ? period : undefined);
+      const result = await reporting.balanceSheet(orgId, typeof period === "string" ? period : undefined);
       await cacheSet(cacheKey, result, REPORT_CACHE_TTL);
       res.setHeader("X-Cache", "MISS");
       return res.json(result);
@@ -49,7 +49,7 @@ export const buildReportingRouter = (
         return res.json(cached);
       }
       
-      const result = reporting.incomeStatement(orgId, typeof period === "string" ? period : undefined);
+      const result = await reporting.incomeStatement(orgId, typeof period === "string" ? period : undefined);
       await cacheSet(cacheKey, result, REPORT_CACHE_TTL);
       res.setHeader("X-Cache", "MISS");
       return res.json(result);
@@ -71,7 +71,7 @@ export const buildReportingRouter = (
         return res.json(cached);
       }
       
-      const result = reporting.cashFlow(orgId, typeof period === "string" ? period : undefined);
+      const result = await reporting.cashFlow(orgId, typeof period === "string" ? period : undefined);
       await cacheSet(cacheKey, result, REPORT_CACHE_TTL);
       res.setHeader("X-Cache", "MISS");
       return res.json(result);
@@ -92,32 +92,34 @@ export const buildReportingRouter = (
     return res.json({ success: true, message: "Report cache invalidated" });
   });
 
-  router.get("/treasury", requireRoles(["viewer", "admin", "auditor"]), (req, res) => {
+  router.get("/treasury", requireRoles(["viewer", "admin", "auditor"]), async (req, res) => {
     const { orgId } = req.query;
     if (!orgId || typeof orgId !== "string") return res.status(400).json({ error: "orgId required" });
     try {
-      return res.json(reporting.treasury(orgId));
+      const result = await reporting.treasury(orgId);
+      return res.json(result);
     } catch (err: any) {
       return res.status(400).json({ error: err.message });
     }
   });
 
-  router.get("/reconciliations", requireRoles(["viewer", "admin", "auditor"]), (req, res) => {
+  router.get("/reconciliations", requireRoles(["viewer", "admin", "auditor"]), async (req, res) => {
     const { orgId } = req.query;
     if (!orgId || typeof orgId !== "string") return res.status(400).json({ error: "orgId required" });
     try {
-      return res.json(recon.list(orgId));
+      const result = await recon.list(orgId);
+      return res.json(result);
     } catch (err: any) {
       return res.status(400).json({ error: err.message });
     }
   });
 
-  router.post("/reconciliations", requireRoles(["approver", "admin"]), (req, res) => {
+  router.post("/reconciliations", requireRoles(["approver", "admin"]), async (req, res) => {
     const { orgId, source, externalRef, externalBalance, ledgerBalance, note } = req.body ?? {};
     if (!orgId || !source || !externalRef)
       return res.status(400).json({ error: "orgId, source, externalRef required" });
     try {
-      const item = recon.reconcile({
+      const item = await recon.reconcile({
         orgId,
         source,
         externalRef,

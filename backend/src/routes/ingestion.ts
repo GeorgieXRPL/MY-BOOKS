@@ -93,11 +93,11 @@ export const buildIngestionRouter = (
     )
   });
 
-  router.post("/bank", requireRoles(["poster", "admin"]), (req, res) => {
+  router.post("/bank", requireRoles(["poster", "admin"]), async (req, res) => {
     const parsed = bankSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json(parsed.error);
     try {
-      const data = bank.ingest(parsed.data.txns as BankTxn[], parsed.data.actorId, parsed.data.period);
+      const data = await bank.ingest(parsed.data.txns as BankTxn[], parsed.data.actorId, parsed.data.period);
       return res.json({ ingested: data.length });
     } catch (err: any) {
       return res.status(400).json({ error: err.message });

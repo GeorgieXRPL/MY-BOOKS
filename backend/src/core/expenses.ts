@@ -1,4 +1,4 @@
-import { DbStore } from "./store.db";
+import { IStore } from "./store.interface";
 import { Expense, ExpenseStatus } from "./types";
 import { newId } from "../utils/id";
 import { AuditLogService } from "./security/auditLog";
@@ -20,9 +20,9 @@ interface CreateExpenseInput {
 }
 
 export class ExpenseService {
-  constructor(private store: DbStore, private audit: AuditLogService) {}
+  constructor(private store: IStore, private audit: AuditLogService) {}
 
-  create(input: CreateExpenseInput): Expense {
+  async create(input: CreateExpenseInput): Promise<Expense> {
     const expense: Expense = {
       id: newId(),
       orgId: input.orgId,
@@ -43,8 +43,8 @@ export class ExpenseService {
       updatedAt: new Date().toISOString()
     };
 
-    this.store.addExpense(expense);
-    this.audit.log({
+    await Promise.resolve(this.store.addExpense(expense));
+    await this.audit.log({
       orgId: input.orgId,
       actorId: input.createdBy,
       action: "create",
@@ -56,12 +56,12 @@ export class ExpenseService {
     return expense;
   }
 
-  get(id: string) {
-    return this.store.getExpense(id);
+  async get(id: string): Promise<Expense | undefined> {
+    return Promise.resolve(this.store.getExpense(id));
   }
 
-  list(orgId: string, filters?: { status?: ExpenseStatus; category?: string }) {
-    let expenses = this.store.listExpenses(orgId);
+  async list(orgId: string, filters?: { status?: ExpenseStatus; category?: string }): Promise<Expense[]> {
+    let expenses = await Promise.resolve(this.store.listExpenses(orgId));
     if (filters?.status) {
       expenses = expenses.filter((e) => e.status === filters.status);
     }
@@ -71,77 +71,81 @@ export class ExpenseService {
     return expenses;
   }
 
-  submit(id: string, actorId: string) {
-    const expense = this.store.getExpense(id);
+  async submit(id: string, actorId: string): Promise<Expense> {
+    const expense = await Promise.resolve(this.store.getExpense(id));
     if (!expense) throw new Error("Expense not found");
     if (expense.status !== "draft") throw new Error("Can only submit draft expenses");
 
-    const updated = this.store.updateExpense(id, { status: "submitted" });
-    this.audit.log({
+    await Promise.resolve(this.store.updateExpense(id, { status: "submitted" }));
+    const updated = await Promise.resolve(this.store.getExpense(id));
+    await this.audit.log({
       orgId: expense.orgId,
       actorId,
       action: "submit",
       entity: "expense",
       entityId: id
     });
-    return updated;
+    return updated!;
   }
 
-  approve(id: string, actorId: string) {
-    const expense = this.store.getExpense(id);
+  async approve(id: string, actorId: string): Promise<Expense> {
+    const expense = await Promise.resolve(this.store.getExpense(id));
     if (!expense) throw new Error("Expense not found");
     if (expense.status !== "submitted") throw new Error("Can only approve submitted expenses");
 
-    const updated = this.store.updateExpense(id, {
+    await Promise.resolve(this.store.updateExpense(id, {
       status: "approved",
       approvedBy: actorId,
       approvedAt: new Date().toISOString()
-    });
+    }));
+    const updated = await Promise.resolve(this.store.getExpense(id));
 
-    this.audit.log({
+    await this.audit.log({
       orgId: expense.orgId,
       actorId,
       action: "approve",
       entity: "expense",
       entityId: id
     });
-    return updated;
+    return updated!;
   }
 
-  reject(id: string, actorId: string) {
-    const expense = this.store.getExpense(id);
+  async reject(id: string, actorId: string): Promise<Expense> {
+    const expense = await Promise.resolve(this.store.getExpense(id));
     if (!expense) throw new Error("Expense not found");
     if (expense.status !== "submitted") throw new Error("Can only reject submitted expenses");
 
-    const updated = this.store.updateExpense(id, { status: "rejected" });
-    this.audit.log({
+    await Promise.resolve(this.store.updateExpense(id, { status: "rejected" }));
+    const updated = await Promise.resolve(this.store.getExpense(id));
+    await this.audit.log({
       orgId: expense.orgId,
       actorId,
       action: "reject",
       entity: "expense",
       entityId: id
     });
-    return updated;
+    return updated!;
   }
 
-  markPaid(id: string, actorId: string) {
-    const expense = this.store.getExpense(id);
+  async markPaid(id: string, actorId: string): Promise<Expense> {
+    const expense = await Promise.resolve(this.store.getExpense(id));
     if (!expense) throw new Error("Expense not found");
     if (expense.status !== "approved") throw new Error("Can only pay approved expenses");
 
-    const updated = this.store.updateExpense(id, { status: "paid" });
-    this.audit.log({
+    await Promise.resolve(this.store.updateExpense(id, { status: "paid" }));
+    const updated = await Promise.resolve(this.store.getExpense(id));
+    await this.audit.log({
       orgId: expense.orgId,
       actorId,
       action: "mark_paid",
       entity: "expense",
       entityId: id
     });
-    return updated;
+    return updated!;
   }
 
-  categoryBreakdown(orgId: string, startDate?: string, endDate?: string) {
-    let expenses = this.store.listExpenses(orgId);
+  async categoryBreakdown(orgId: string, startDate?: string, endDate?: string) {
+    let expenses = await Promise.resolve(this.store.listExpenses(orgId));
     if (startDate) {
       expenses = expenses.filter((e) => e.date >= startDate);
     }

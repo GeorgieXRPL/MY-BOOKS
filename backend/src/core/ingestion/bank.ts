@@ -1,5 +1,6 @@
 import { LedgerService } from "../ledger";
-import { JournalLine, NormalizedTxn } from "../types";
+import { IStore } from "../store.interface";
+import { Account, JournalEntry, JournalLine, NormalizedTxn } from "../types";
 import { newId } from "../../utils/id";
 
 export interface BankTxn {
@@ -12,25 +13,25 @@ export interface BankTxn {
 }
 
 export class BankIngestor {
-  constructor(private store: any, private ledger: LedgerService) {}
+  constructor(private store: IStore, private ledger: LedgerService) {}
 
-  private findAccount(orgId: string, nameIncludes: string) {
-    return this.store
-      .listAccounts(orgId)
-      .find((a) => a.name.toLowerCase().includes(nameIncludes.toLowerCase()));
+  private async findAccount(orgId: string, nameIncludes: string): Promise<Account | undefined> {
+    const accounts = await Promise.resolve(this.store.listAccounts(orgId));
+    return accounts.find((a: Account) => a.name.toLowerCase().includes(nameIncludes.toLowerCase()));
   }
 
-  private alreadyIngested(id: string) {
-    return this.store.listJournals("demo-org").some((j: any) => j.externalRef === id);
+  private async alreadyIngested(id: string): Promise<boolean> {
+    const journals = await Promise.resolve(this.store.listJournals("demo-org"));
+    return journals.some((j: JournalEntry) => j.externalRef === id);
   }
 
-  ingest(txns: BankTxn[], actorId: string, period: string) {
+  async ingest(txns: BankTxn[], actorId: string, period: string): Promise<NormalizedTxn[]> {
     const results: NormalizedTxn[] = [];
     for (const t of txns) {
-      if (this.alreadyIngested(t.externalId)) continue;
-      const cash = this.findAccount(t.orgId, "Bank Accounts") ?? this.findAccount(t.orgId, "Cash");
-      const revenue = this.findAccount(t.orgId, "Revenue");
-      const expense = this.findAccount(t.orgId, "Operating Expenses");
+      if (await this.alreadyIngested(t.externalId)) continue;
+      const cash = await this.findAccount(t.orgId, "Bank Accounts") ?? await this.findAccount(t.orgId, "Cash");
+      const revenue = await this.findAccount(t.orgId, "Revenue");
+      const expense = await this.findAccount(t.orgId, "Operating Expenses");
       if (!cash || !revenue || !expense) throw new Error("Required accounts missing");
 
       const lines: JournalLine[] = [];
@@ -75,7 +76,7 @@ export class BankIngestor {
         });
       }
 
-      this.ledger.createDraft({
+      await this.ledger.createDraft({
         orgId: t.orgId,
         period,
         lines,

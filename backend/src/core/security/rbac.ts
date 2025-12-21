@@ -1,19 +1,21 @@
 import { Role } from "../types";
+import { IStore } from "../store.interface";
 
 export class RbacService {
-  constructor(private store: any) {}
+  constructor(private store: IStore) {}
 
-  assign(userId: string, roles: Role[]) {
-    this.store.upsertRole(userId, roles);
+  async assign(userId: string, roles: Role[]): Promise<{ userId: string; roles: Role[] }> {
+    await Promise.resolve(this.store.upsertRole(userId, roles));
     return { userId, roles };
   }
 
-  hasRole(userId: string, role: Role) {
-    return this.store.getUserRoles(userId).includes(role);
+  async hasRole(userId: string, role: Role): Promise<boolean> {
+    const userRoles = await Promise.resolve(this.store.getUserRoles(userId));
+    return userRoles.includes(role);
   }
 
-  require(userId: string, roles: Role[]) {
-    const userRoles = this.store.getUserRoles(userId);
+  async require(userId: string, roles: Role[]): Promise<void> {
+    const userRoles = await Promise.resolve(this.store.getUserRoles(userId));
     const ok = roles.some((r) => userRoles.includes(r));
     if (!ok) {
       throw new Error("Forbidden: missing role");

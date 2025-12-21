@@ -92,32 +92,32 @@ export const buildCalculationsRouter = (
   });
 
   // ============ RATIOS ============
-  router.get("/ratios", (req, res) => {
+  router.get("/ratios", async (req, res) => {
     try {
       const orgId = (req.query.orgId as string) || "demo-org";
       const period = req.query.period as string | undefined;
-      const all = ratios.allRatios(orgId, period);
+      const all = await ratios.allRatios(orgId, period);
       res.json(all);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
     }
   });
 
-  router.get("/ratios/dashboard", (req, res) => {
+  router.get("/ratios/dashboard", async (req, res) => {
     try {
       const orgId = (req.query.orgId as string) || "demo-org";
       const period = req.query.period as string | undefined;
-      const dashboard = ratios.dashboard(orgId, period);
+      const dashboard = await ratios.dashboard(orgId, period);
       res.json(dashboard);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
     }
   });
 
-  router.post("/ratios/trend", (req, res) => {
+  router.post("/ratios/trend", async (req, res) => {
     try {
       const { orgId, periods } = req.body;
-      const trend = ratios.trend(orgId || "demo-org", periods || []);
+      const trend = await ratios.trend(orgId || "demo-org", periods || []);
       res.json(trend);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
@@ -125,11 +125,12 @@ export const buildCalculationsRouter = (
   });
 
   // ============ FORMULAS ============
-  router.get("/formulas", (req, res) => {
+  router.get("/formulas", async (req, res) => {
     try {
       const orgId = (req.query.orgId as string) || "demo-org";
       const category = req.query.category as string | undefined;
-      res.json(formulas.list(orgId, category));
+      const list = await formulas.list(orgId, category);
+      res.json(list);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
     }
@@ -143,20 +144,20 @@ export const buildCalculationsRouter = (
     }
   });
 
-  router.post("/formulas/seed-presets", (req, res) => {
+  router.post("/formulas/seed-presets", async (req, res) => {
     try {
       const orgId = (req.body.orgId as string) || "demo-org";
       const actorId = (req as any).user?.sub || "unknown";
-      const created = formulas.seedPresets(orgId, actorId);
+      const created = await formulas.seedPresets(orgId, actorId);
       res.json({ seeded: created.length, formulas: created });
     } catch (e: any) {
       res.status(400).json({ error: e.message });
     }
   });
 
-  router.get("/formulas/:id", (req, res) => {
+  router.get("/formulas/:id", async (req, res) => {
     try {
-      const formula = formulas.get(req.params.id);
+      const formula = await formulas.get(req.params.id);
       if (!formula) return res.status(404).json({ error: "Not found" });
       res.json(formula);
     } catch (e: any) {
@@ -164,10 +165,10 @@ export const buildCalculationsRouter = (
     }
   });
 
-  router.post("/formulas", (req, res) => {
+  router.post("/formulas", async (req, res) => {
     try {
       const actorId = (req as any).user?.sub || "unknown";
-      const formula = formulas.create({
+      const formula = await formulas.create({
         ...req.body,
         createdBy: actorId
       });
@@ -177,20 +178,20 @@ export const buildCalculationsRouter = (
     }
   });
 
-  router.post("/formulas/:id/evaluate", (req, res) => {
+  router.post("/formulas/:id/evaluate", async (req, res) => {
     try {
       const { context } = req.body;
-      const result = formulas.evaluate(req.params.id, context || {});
+      const result = await formulas.evaluate(req.params.id, context || {});
       res.json(result);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
     }
   });
 
-  router.post("/formulas/:id/evaluate-auto", (req, res) => {
+  router.post("/formulas/:id/evaluate-auto", async (req, res) => {
     try {
       const { orgId, period, additionalContext } = req.body;
-      const result = formulas.evaluateWithAutoContext(
+      const result = await formulas.evaluateWithAutoContext(
         req.params.id,
         orgId || "demo-org",
         period,
@@ -202,11 +203,11 @@ export const buildCalculationsRouter = (
     }
   });
 
-  router.get("/formulas/evaluate-all", (req, res) => {
+  router.get("/formulas/evaluate-all", async (req, res) => {
     try {
       const orgId = (req.query.orgId as string) || "demo-org";
       const period = req.query.period as string | undefined;
-      const results = formulas.evaluateAll(orgId, period);
+      const results = await formulas.evaluateAll(orgId, period);
       res.json(results);
     } catch (e: any) {
       res.status(400).json({ error: e.message });

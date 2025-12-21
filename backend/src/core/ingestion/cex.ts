@@ -1,6 +1,7 @@
 import { LedgerService } from "../ledger";
 import { PricingService } from "./pricing";
-import { JournalLine, NormalizedTxn } from "../types";
+import { IStore } from "../store.interface";
+import { Account, JournalEntry, JournalLine, NormalizedTxn } from "../types";
 import { newId } from "../../utils/id";
 
 export interface CexTrade {
@@ -17,28 +18,28 @@ export interface CexTrade {
 
 export class CexIngestor {
   constructor(
-    private store: any,
+    private store: IStore,
     private pricing: PricingService,
     private ledger: LedgerService
   ) {}
 
-  private findAccount(orgId: string, nameIncludes: string) {
-    return this.store
-      .listAccounts(orgId)
-      .find((a) => a.name.toLowerCase().includes(nameIncludes.toLowerCase()));
+  private async findAccount(orgId: string, nameIncludes: string): Promise<Account | undefined> {
+    const accounts = await Promise.resolve(this.store.listAccounts(orgId));
+    return accounts.find((a: Account) => a.name.toLowerCase().includes(nameIncludes.toLowerCase()));
   }
 
-  private alreadyIngested(id: string) {
-    return this.store.listJournals("demo-org").some((j: any) => j.externalRef === id);
+  private async alreadyIngested(id: string): Promise<boolean> {
+    const journals = await Promise.resolve(this.store.listJournals("demo-org"));
+    return journals.some((j: JournalEntry) => j.externalRef === id);
   }
 
-  async ingest(trades: CexTrade[], actorId: string, period: string) {
+  async ingest(trades: CexTrade[], actorId: string, period: string): Promise<NormalizedTxn[]> {
     const results: NormalizedTxn[] = [];
     for (const t of trades) {
-      if (this.alreadyIngested(t.tradeId)) continue;
-      const asset = this.findAccount(t.orgId, "CEX Balances") ?? this.findAccount(t.orgId, "Crypto Assets");
-      const cash = this.findAccount(t.orgId, "Bank Accounts") ?? this.findAccount(t.orgId, "Cash");
-      const expense = this.findAccount(t.orgId, "Operating Expenses");
+      if (await this.alreadyIngested(t.tradeId)) continue;
+      const asset = await this.findAccount(t.orgId, "CEX Balances") ?? await this.findAccount(t.orgId, "Crypto Assets");
+      const cash = await this.findAccount(t.orgId, "Bank Accounts") ?? await this.findAccount(t.orgId, "Cash");
+      const expense = await this.findAccount(t.orgId, "Operating Expenses");
       if (!asset || !cash || !expense) throw new Error("Required accounts not found");
 
       const notional = t.quantity * t.price;
@@ -105,7 +106,7 @@ export class CexIngestor {
         });
       }
 
-      this.ledger.createDraft({
+      await this.ledger.createDraft({
         orgId: t.orgId,
         period,
         lines,

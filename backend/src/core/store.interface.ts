@@ -1,143 +1,188 @@
 /**
- * Store Interface
- * Common interface for both SQLite (DbStore) and PostgreSQL (PgStore) stores
- * This allows services to work with either database backend
+ * IStore Interface
+ * 
+ * This interface defines all data access methods that both DbStore (SQLite)
+ * and PgStore (PostgreSQL) must implement.
+ * 
+ * All methods use Promise-compatible return types to work with both
+ * synchronous (SQLite) and asynchronous (PostgreSQL) implementations.
+ * 
+ * Usage: Always await store method calls:
+ *   const user = await Promise.resolve(store.getUserById(id));
  */
 
 import {
-  Account, Wallet, JournalEntry, PriceTick, FXRate,
-  ReconciliationItem, AuditLogEntry, PeriodLock, ChecklistItem, Role,
-  TreasuryPolicy, Invoice, Expense, Employee, PayrollRun,
-  BankTransaction, CryptoTransaction, CryptoLot, Asset,
-  DepreciationEntry, TaxRate, Formula, Counterparty
+  Account,
+  AuditLogEntry,
+  ChecklistItem,
+  FXRate,
+  JournalEntry,
+  PeriodLock,
+  PriceTick,
+  ReconciliationItem,
+  Role,
+  TreasuryPolicy,
+  Wallet,
+  Invoice,
+  Expense,
+  Employee,
+  PayrollRun,
+  BankTransaction,
+  CryptoTransaction,
+  CryptoLot,
+  Asset,
+  DepreciationEntry,
+  TaxRate,
+  Formula,
+  Counterparty
 } from "./types";
 
+// Type that can be either sync or async
+type MaybePromise<T> = T | Promise<T>;
+
 export interface IStore {
-  // Accounts
-  upsertAccount(account: Account): Account | Promise<Account>;
-  listAccounts(orgId: string): Account[] | Promise<Account[]>;
+  // ============ ACCOUNTS ============
+  upsertAccount(account: Account): MaybePromise<void>;
+  listAccounts(orgId: string): MaybePromise<Account[]>;
 
-  // Wallets
-  addWallet(wallet: Wallet): Wallet | Promise<Wallet>;
-  listWallets(orgId: string): Wallet[] | Promise<Wallet[]>;
+  // ============ WALLETS ============
+  addWallet(wallet: Wallet): MaybePromise<void>;
+  listWallets(orgId: string): MaybePromise<Wallet[]>;
 
-  // Journals
-  addJournal(journal: JournalEntry): JournalEntry | Promise<JournalEntry>;
-  getJournal(id: string): JournalEntry | undefined | Promise<JournalEntry | undefined>;
-  updateJournal(id: string, patch: Partial<JournalEntry>): JournalEntry | Promise<JournalEntry>;
-  listJournals(orgId: string): JournalEntry[] | Promise<JournalEntry[]>;
+  // ============ JOURNALS ============
+  addJournal(journal: JournalEntry): MaybePromise<void>;
+  getJournal(id: string): MaybePromise<JournalEntry | undefined>;
+  updateJournal(id: string, patch: Partial<JournalEntry>): MaybePromise<void>;
+  listJournals(orgId: string): MaybePromise<JournalEntry[]>;
 
-  // Price Ticks
-  addPriceTick(price: Omit<PriceTick, "id">): PriceTick | Promise<PriceTick>;
-  latestPrice(symbol: string, currency: string): PriceTick | undefined | Promise<PriceTick | undefined>;
+  // ============ PRICING ============
+  addPriceTick(price: Omit<PriceTick, "id">): MaybePromise<void>;
+  latestPrice(symbol: string, currency: string): MaybePromise<PriceTick | undefined>;
+  addFxRate(rate: Omit<FXRate, "id">): MaybePromise<void>;
 
-  // FX Rates
-  addFxRate(rate: Omit<FXRate, "id">): FXRate | Promise<FXRate>;
+  // ============ RECONCILIATION ============
+  addReconciliation(rec: Omit<ReconciliationItem, "id" | "createdAt">): MaybePromise<void>;
+  listReconciliations(orgId: string): MaybePromise<ReconciliationItem[]>;
 
-  // Reconciliations
-  addReconciliation(rec: Omit<ReconciliationItem, "id" | "createdAt">): ReconciliationItem | Promise<ReconciliationItem>;
-  listReconciliations(orgId: string): ReconciliationItem[] | Promise<ReconciliationItem[]>;
+  // ============ AUDIT ============
+  addAudit(entry: Omit<AuditLogEntry, "id" | "timestamp">): MaybePromise<void>;
+  listAudit(orgId: string): MaybePromise<AuditLogEntry[]>;
 
-  // Audit Logs
-  addAudit(entry: Omit<AuditLogEntry, "id" | "timestamp">): AuditLogEntry | Promise<AuditLogEntry>;
-  listAudit(orgId: string): AuditLogEntry[] | Promise<AuditLogEntry[]>;
+  // ============ PERIOD LOCKS ============
+  lockPeriod(lock: PeriodLock): MaybePromise<void>;
+  isPeriodLocked(orgId: string, period: string): MaybePromise<boolean>;
 
-  // Period Locks
-  lockPeriod(lock: PeriodLock): void | Promise<void>;
-  isPeriodLocked(orgId: string, period: string): boolean | Promise<boolean>;
+  // ============ CHECKLIST ============
+  listChecklist?(orgId: string, period: string): MaybePromise<ChecklistItem[]>;
+  addChecklistItem?(item: ChecklistItem): MaybePromise<void>;
+  updateChecklistItem?(id: string, patch: Partial<ChecklistItem>): MaybePromise<void>;
 
-  // Roles
-  upsertRole(userId: string, roles: Role[]): void | Promise<void>;
-  getUserRoles(userId: string): Role[] | Promise<Role[]>;
+  // ============ RBAC ============
+  upsertRole(userId: string, roles: Role[]): MaybePromise<void>;
+  getUserRoles(userId: string): MaybePromise<Role[]>;
 
-  // Policies
-  setPolicy(orgId: string, policy: TreasuryPolicy): void | Promise<void>;
-  getPolicy(orgId: string): TreasuryPolicy | undefined | Promise<TreasuryPolicy | undefined>;
+  // ============ POLICIES ============
+  setPolicy(orgId: string, policy: TreasuryPolicy): MaybePromise<void>;
+  getPolicy(orgId: string): MaybePromise<TreasuryPolicy | undefined>;
 
-  // Checklist
-  checklist: {
-    push(...items: ChecklistItem[]): void | Promise<void>;
-    filter(predicate: (c: ChecklistItem) => boolean): ChecklistItem[] | Promise<ChecklistItem[]>;
-    find(predicate: (c: ChecklistItem) => boolean): ChecklistItem | undefined | Promise<ChecklistItem | undefined>;
-  };
+  // ============ COUNTERPARTIES ============
+  addCounterparty(cp: Counterparty): MaybePromise<void>;
+  listCounterparties(orgId: string): MaybePromise<Counterparty[]>;
+  getCounterparty(id: string): MaybePromise<Counterparty | undefined>;
 
-  // Counterparties
-  addCounterparty(cp: Counterparty): Counterparty | Promise<Counterparty>;
-  listCounterparties(orgId: string): Counterparty[] | Promise<Counterparty[]>;
-  getCounterparty(id: string): Counterparty | undefined | Promise<Counterparty | undefined>;
+  // ============ INVOICES ============
+  addInvoice(invoice: Invoice): MaybePromise<void>;
+  getInvoice(id: string): MaybePromise<Invoice | undefined>;
+  listInvoices(orgId: string): MaybePromise<Invoice[]>;
+  updateInvoice(id: string, patch: Partial<Invoice>): MaybePromise<void>;
+  nextInvoiceNumber(orgId: string, type: string): MaybePromise<string>;
 
-  // Invoices
-  addInvoice(invoice: Invoice): Invoice | Promise<Invoice>;
-  getInvoice(id: string): Invoice | undefined | Promise<Invoice | undefined>;
-  listInvoices(orgId: string): Invoice[] | Promise<Invoice[]>;
-  updateInvoice(id: string, patch: Partial<Invoice>): Invoice | Promise<Invoice>;
-  nextInvoiceNumber(orgId: string, type: string): string | Promise<string>;
+  // ============ EXPENSES ============
+  addExpense(expense: Expense): MaybePromise<void>;
+  getExpense(id: string): MaybePromise<Expense | undefined>;
+  listExpenses(orgId: string): MaybePromise<Expense[]>;
+  updateExpense(id: string, patch: Partial<Expense>): MaybePromise<void>;
 
-  // Expenses
-  addExpense(expense: Expense): Expense | Promise<Expense>;
-  getExpense(id: string): Expense | undefined | Promise<Expense | undefined>;
-  listExpenses(orgId: string): Expense[] | Promise<Expense[]>;
-  updateExpense(id: string, patch: Partial<Expense>): Expense | Promise<Expense>;
+  // ============ EMPLOYEES ============
+  addEmployee(emp: Employee): MaybePromise<void>;
+  listEmployees(orgId: string): MaybePromise<Employee[]>;
+  getEmployee(id: string): MaybePromise<Employee | undefined>;
 
-  // Employees
-  addEmployee(emp: Employee): Employee | Promise<Employee>;
-  listEmployees(orgId: string): Employee[] | Promise<Employee[]>;
-  getEmployee(id: string): Employee | undefined | Promise<Employee | undefined>;
+  // ============ PAYROLL ============
+  addPayrollRun(run: PayrollRun): MaybePromise<void>;
+  getPayrollRun(id: string): MaybePromise<PayrollRun | undefined>;
+  listPayrollRuns(orgId: string): MaybePromise<PayrollRun[]>;
+  updatePayrollRun(id: string, patch: Partial<PayrollRun>): MaybePromise<void>;
 
-  // Payroll
-  addPayrollRun(run: PayrollRun): PayrollRun | Promise<PayrollRun>;
-  getPayrollRun(id: string): PayrollRun | undefined | Promise<PayrollRun | undefined>;
-  listPayrollRuns(orgId: string): PayrollRun[] | Promise<PayrollRun[]>;
-  updatePayrollRun(id: string, patch: Partial<PayrollRun>): PayrollRun | Promise<PayrollRun>;
+  // ============ BANK TRANSACTIONS ============
+  addBankTransaction(txn: BankTransaction): MaybePromise<void>;
+  listBankTransactions(orgId: string): MaybePromise<BankTransaction[]>;
+  getBankTransaction(id: string): MaybePromise<BankTransaction | undefined>;
+  updateBankTransaction(id: string, patch: Partial<BankTransaction>): MaybePromise<void>;
 
-  // Bank Transactions
-  addBankTransaction(txn: BankTransaction): BankTransaction | Promise<BankTransaction>;
-  listBankTransactions(orgId: string): BankTransaction[] | Promise<BankTransaction[]>;
-  getBankTransaction(id: string): BankTransaction | undefined | Promise<BankTransaction | undefined>;
-  updateBankTransaction(id: string, patch: Partial<BankTransaction>): BankTransaction | Promise<BankTransaction>;
+  // ============ CRYPTO ============
+  addCryptoTransaction(txn: CryptoTransaction): MaybePromise<void>;
+  listCryptoTransactions(orgId: string): MaybePromise<CryptoTransaction[]>;
+  addCryptoLot(lot: CryptoLot): MaybePromise<void>;
+  listCryptoLots(orgId: string, tokenSymbol?: string): MaybePromise<CryptoLot[]>;
+  updateCryptoLot(id: string, patch: Partial<CryptoLot>): MaybePromise<void>;
 
-  // Crypto
-  addCryptoTransaction(txn: CryptoTransaction): CryptoTransaction | Promise<CryptoTransaction>;
-  listCryptoTransactions(orgId: string): CryptoTransaction[] | Promise<CryptoTransaction[]>;
-  addCryptoLot(lot: CryptoLot): CryptoLot | Promise<CryptoLot>;
-  listCryptoLots(orgId: string, tokenSymbol?: string): CryptoLot[] | Promise<CryptoLot[]>;
-  updateCryptoLot(id: string, patch: Partial<CryptoLot>): CryptoLot | Promise<CryptoLot>;
+  // ============ ASSETS ============
+  addAsset(asset: Asset): MaybePromise<void>;
+  listAssets(orgId: string): MaybePromise<Asset[]>;
+  getAsset(id: string): MaybePromise<Asset | undefined>;
+  addDepreciationEntry(entry: DepreciationEntry): MaybePromise<void>;
+  listDepreciationEntries(assetId: string): MaybePromise<DepreciationEntry[]>;
 
-  // Assets
-  addAsset(asset: Asset): Asset | Promise<Asset>;
-  listAssets(orgId: string): Asset[] | Promise<Asset[]>;
-  getAsset(id: string): Asset | undefined | Promise<Asset | undefined>;
-  addDepreciationEntry(entry: DepreciationEntry): DepreciationEntry | Promise<DepreciationEntry>;
-  listDepreciationEntries(assetId: string): DepreciationEntry[] | Promise<DepreciationEntry[]>;
+  // ============ TAX ============
+  addTaxRate(rate: TaxRate): MaybePromise<void>;
+  listTaxRates(orgId: string): MaybePromise<TaxRate[]>;
+  getDefaultTaxRate(orgId: string, type: string): MaybePromise<TaxRate | undefined>;
 
-  // Tax Rates
-  addTaxRate(rate: TaxRate): TaxRate | Promise<TaxRate>;
-  listTaxRates(orgId: string): TaxRate[] | Promise<TaxRate[]>;
-  getDefaultTaxRate(orgId: string, type: string): TaxRate | undefined | Promise<TaxRate | undefined>;
+  // ============ FORMULAS ============
+  addFormula(formula: Formula): MaybePromise<void>;
+  listFormulas(orgId: string): MaybePromise<Formula[]>;
+  getFormula(id: string): MaybePromise<Formula | undefined>;
 
-  // Formulas
-  addFormula(formula: Formula): Formula | Promise<Formula>;
-  listFormulas(orgId: string): Formula[] | Promise<Formula[]>;
-  getFormula(id: string): Formula | undefined | Promise<Formula | undefined>;
+  // ============ USERS ============
+  createUser(user: {
+    id: string;
+    email: string;
+    passwordHash: string;
+    name?: string;
+    orgId: string;
+    roles: Role[];
+  }): MaybePromise<any>;
+  getUserByEmail(email: string): MaybePromise<any>;
+  getUserById(id: string): MaybePromise<any>;
+  updateUserLastLogin(userId: string): MaybePromise<void>;
+  updateUser(userId: string, patch: { name?: string; roles?: Role[]; isActive?: boolean; passwordHash?: string }): MaybePromise<any>;
+  listUsersByOrg(orgId: string): MaybePromise<any[]>;
 
-  // Users
-  createUser(user: { id: string; email: string; passwordHash: string; name?: string; orgId: string; roles: Role[] }): any | Promise<any>;
-  getUserByEmail(email: string): any | Promise<any>;
-  getUserById(id: string): any | Promise<any>;
-  updateUserLastLogin(userId: string): void | Promise<void>;
-  updateUser(userId: string, patch: { name?: string; roles?: Role[]; isActive?: boolean }): any | Promise<any>;
-  listUsersByOrg(orgId: string): any[] | Promise<any[]>;
+  // ============ TOKENS ============
+  createRefreshToken(userId: string, token: string, expiresAt: Date): MaybePromise<void>;
+  getRefreshToken(token: string): MaybePromise<{ userId: string; expiresAt: string; revokedAt?: string } | undefined>;
+  revokeRefreshToken(token: string): MaybePromise<void>;
+  revokeAllUserTokens(userId: string): MaybePromise<void>;
 
-  // Refresh Tokens
-  createRefreshToken(userId: string, token: string, expiresAt: Date): any | Promise<any>;
-  getRefreshToken(token: string): any | Promise<any>;
-  revokeRefreshToken(token: string): void | Promise<void>;
-  revokeAllUserTokens(userId: string): void | Promise<void>;
-  cleanExpiredTokens(): void | Promise<void>;
+  // ============ INVITATIONS ============
+  createInvitation(invite: {
+    id: string;
+    orgId: string;
+    email: string;
+    roles: Role[];
+    invitedBy: string;
+    expiresAt: Date;
+  }): MaybePromise<void>;
+  getInvitationByEmail(email: string, orgId: string): MaybePromise<any>;
+  acceptInvitation(inviteId: string): MaybePromise<void>;
+  listPendingInvitations?(orgId: string): MaybePromise<any[]>;
+}
 
-  // Invitations
-  createInvitation(invite: { id: string; orgId: string; email: string; roles: Role[]; invitedBy: string; expiresAt: Date }): any | Promise<any>;
-  getInvitationByEmail(email: string, orgId: string): any | Promise<any>;
-  acceptInvitation(inviteId: string): void | Promise<void>;
-  listPendingInvitations(orgId: string): any[] | Promise<any[]>;
+/**
+ * Helper function to ensure a value is awaited
+ * Works with both sync and async values
+ */
+export async function resolveStore<T>(value: MaybePromise<T>): Promise<T> {
+  return Promise.resolve(value);
 }

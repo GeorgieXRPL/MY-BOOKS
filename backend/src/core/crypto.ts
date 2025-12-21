@@ -1,4 +1,4 @@
-import { DbStore } from "./store.db";
+import { IStore } from "./store.interface";
 import { CryptoTransaction, CryptoLot, CryptoTxnType } from "./types";
 import { newId } from "../utils/id";
 import { AuditLogService } from "./security/auditLog";
@@ -22,9 +22,9 @@ interface CreateCryptoTxnInput {
 type CostBasisMethod = "fifo" | "lifo" | "average";
 
 export class CryptoService {
-  constructor(private store: DbStore, private audit: AuditLogService) {}
+  constructor(private store: IStore, private audit: AuditLogService) {}
 
-  recordTransaction(input: CreateCryptoTxnInput): CryptoTransaction {
+  async recordTransaction(input: CreateCryptoTxnInput): Promise<CryptoTransaction> {
     const txn: CryptoTransaction = {
       id: newId(),
       orgId: input.orgId,
@@ -44,7 +44,7 @@ export class CryptoService {
       createdAt: new Date().toISOString()
     };
 
-    this.store.addCryptoTransaction(txn);
+    await Promise.resolve(this.store.addCryptoTransaction(txn));
 
     // Create lot for acquisitions
     if (["transfer", "reward", "stake"].includes(input.type) && input.quantity > 0) {
@@ -58,10 +58,10 @@ export class CryptoService {
         txnId: txn.id,
         remainingQty: input.quantity
       };
-      this.store.addCryptoLot(lot);
+      await Promise.resolve(this.store.addCryptoLot(lot));
     }
 
-    this.audit.log({
+    await this.audit.log({
       orgId: input.orgId,
       actorId: "system",
       action: "record",
@@ -72,26 +72,27 @@ export class CryptoService {
     return txn;
   }
 
-  listTransactions(orgId: string, tokenSymbol?: string) {
-    let txns = this.store.listCryptoTransactions(orgId);
+  async listTransactions(orgId: string, tokenSymbol?: string): Promise<CryptoTransaction[]> {
+    let txns = await Promise.resolve(this.store.listCryptoTransactions(orgId));
     if (tokenSymbol) {
       txns = txns.filter((t) => t.tokenSymbol === tokenSymbol);
     }
     return txns;
   }
 
-  listLots(orgId: string, tokenSymbol?: string) {
-    return this.store.listCryptoLots(orgId, tokenSymbol);
+  async listLots(orgId: string, tokenSymbol?: string): Promise<CryptoLot[]> {
+    return Promise.resolve(this.store.listCryptoLots(orgId, tokenSymbol));
   }
 
-  calculateRealizedGain(
+  async calculateRealizedGain(
     orgId: string,
     tokenSymbol: string,
     disposalQty: number,
     disposalPriceUsd: number,
     method: CostBasisMethod = "fifo"
   ) {
-    const lots = this.store.listCryptoLots(orgId, tokenSymbol).filter((l) => l.remainingQty > 0);
+    const allLots = await Promise.resolve(this.store.listCryptoLots(orgId, tokenSymbol));
+    const lots = allLots.filter((l) => l.remainingQty > 0);
 
     if (method === "lifo") {
       lots.reverse();
@@ -113,7 +114,7 @@ export class CryptoService {
         if (remaining <= 0) break;
         const useQty = Math.min(lot.remainingQty, remaining);
         usedLots.push({ lotId: lot.id, qty: useQty, costBasis: avgCost * useQty });
-        this.store.updateCryptoLot(lot.id, { remainingQty: lot.remainingQty - useQty });
+        await Promise.resolve(this.store.updateCryptoLot(lot.id, { remainingQty: lot.remainingQty - useQty }));
         remaining -= useQty;
       }
     } else {
@@ -128,7 +129,7 @@ export class CryptoService {
         usedLots.push({ lotId: lot.id, qty: useQty, costBasis });
         totalCostBasis += costBasis;
 
-        this.store.updateCryptoLot(lot.id, { remainingQty: lot.remainingQty - useQty });
+        await Promise.resolve(this.store.updateCryptoLot(lot.id, { remainingQty: lot.remainingQty - useQty }));
         remaining -= useQty;
       }
     }
@@ -150,8 +151,9 @@ export class CryptoService {
     };
   }
 
-  unrealizedGains(orgId: string, currentPrices: Record<string, number>) {
-    const lots = this.store.listCryptoLots(orgId).filter((l) => l.remainingQty > 0);
+  async unrealizedGains(orgId: string, currentPrices: Record<string, number>) {
+    const allLots = await Promise.resolve(this.store.listCryptoLots(orgId));
+    const lots = allLots.filter((l) => l.remainingQty > 0);
 
     const byToken: Record<string, { qty: number; costBasis: number; marketValue: number; unrealizedGain: number }> = {};
 
@@ -184,9 +186,9 @@ export class CryptoService {
     };
   }
 
-  costBasisReport(orgId: string) {
-    const lots = this.store.listCryptoLots(orgId);
-    const txns = this.store.listCryptoTransactions(orgId);
+  async costBasisReport(orgId: string) {
+    const lots = await Promise.resolve(this.store.listCryptoLots(orgId));
+    const txns = await Promise.resolve(this.store.listCryptoTransactions(orgId));
 
     return {
       lots: lots.map((l) => ({
@@ -202,8 +204,9 @@ export class CryptoService {
     };
   }
 
-  holdings(orgId: string) {
-    const lots = this.store.listCryptoLots(orgId).filter((l) => l.remainingQty > 0);
+  async holdings(orgId: string): Promise<Record<string, number>> {
+    const allLots = await Promise.resolve(this.store.listCryptoLots(orgId));
+    const lots = allLots.filter((l) => l.remainingQty > 0);
 
     const byToken: Record<string, number> = {};
     for (const lot of lots) {

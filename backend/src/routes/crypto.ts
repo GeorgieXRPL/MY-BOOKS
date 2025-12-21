@@ -5,11 +5,11 @@ export const buildCryptoRouter = (crypto: CryptoService) => {
   const router = Router();
 
   // List transactions
-  router.get("/transactions", (req, res) => {
+  router.get("/transactions", async (req, res) => {
     try {
       const orgId = (req.query.orgId as string) || "demo-org";
       const tokenSymbol = req.query.tokenSymbol as string | undefined;
-      const list = crypto.listTransactions(orgId, tokenSymbol);
+      const list = await crypto.listTransactions(orgId, tokenSymbol);
       res.json(list);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
@@ -17,9 +17,9 @@ export const buildCryptoRouter = (crypto: CryptoService) => {
   });
 
   // Record transaction
-  router.post("/transactions", (req, res) => {
+  router.post("/transactions", async (req, res) => {
     try {
-      const txn = crypto.recordTransaction(req.body);
+      const txn = await crypto.recordTransaction(req.body);
       res.status(201).json(txn);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
@@ -27,11 +27,11 @@ export const buildCryptoRouter = (crypto: CryptoService) => {
   });
 
   // List lots
-  router.get("/lots", (req, res) => {
+  router.get("/lots", async (req, res) => {
     try {
       const orgId = (req.query.orgId as string) || "demo-org";
       const tokenSymbol = req.query.tokenSymbol as string | undefined;
-      const lots = crypto.listLots(orgId, tokenSymbol);
+      const lots = await crypto.listLots(orgId, tokenSymbol);
       res.json(lots);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
@@ -39,10 +39,10 @@ export const buildCryptoRouter = (crypto: CryptoService) => {
   });
 
   // Holdings
-  router.get("/holdings", (req, res) => {
+  router.get("/holdings", async (req, res) => {
     try {
       const orgId = (req.query.orgId as string) || "demo-org";
-      const holdings = crypto.holdings(orgId);
+      const holdings = await crypto.holdings(orgId);
       res.json(holdings);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
@@ -50,10 +50,10 @@ export const buildCryptoRouter = (crypto: CryptoService) => {
   });
 
   // Calculate realized gain on disposal
-  router.post("/calculate-gain", (req, res) => {
+  router.post("/calculate-gain", async (req, res) => {
     try {
       const { orgId, tokenSymbol, disposalQty, disposalPriceUsd, method } = req.body;
-      const result = crypto.calculateRealizedGain(
+      const result = await crypto.calculateRealizedGain(
         orgId || "demo-org",
         tokenSymbol,
         disposalQty,
@@ -67,10 +67,10 @@ export const buildCryptoRouter = (crypto: CryptoService) => {
   });
 
   // Unrealized gains
-  router.post("/unrealized-gains", (req, res) => {
+  router.post("/unrealized-gains", async (req, res) => {
     try {
       const { orgId, currentPrices } = req.body;
-      const result = crypto.unrealizedGains(orgId || "demo-org", currentPrices || {});
+      const result = await crypto.unrealizedGains(orgId || "demo-org", currentPrices || {});
       res.json(result);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
@@ -78,10 +78,10 @@ export const buildCryptoRouter = (crypto: CryptoService) => {
   });
 
   // Cost basis report
-  router.get("/reports/cost-basis", (req, res) => {
+  router.get("/reports/cost-basis", async (req, res) => {
     try {
       const orgId = (req.query.orgId as string) || "demo-org";
-      const report = crypto.costBasisReport(orgId);
+      const report = await crypto.costBasisReport(orgId);
       res.json(report);
     } catch (e: any) {
       res.status(400).json({ error: e.message });

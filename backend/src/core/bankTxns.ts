@@ -1,4 +1,4 @@
-import { DbStore } from "./store.db";
+import { IStore } from "./store.interface";
 import { BankTransaction, BankTxnStatus } from "./types";
 import { newId } from "../utils/id";
 import { AuditLogService } from "./security/auditLog";
@@ -22,9 +22,9 @@ interface CsvRow {
 }
 
 export class BankTxnService {
-  constructor(private store: DbStore, private audit: AuditLogService) {}
+  constructor(private store: IStore, private audit: AuditLogService) {}
 
-  create(input: CreateBankTxnInput): BankTransaction {
+  async create(input: CreateBankTxnInput): Promise<BankTransaction> {
     const txn: BankTransaction = {
       id: newId(),
       orgId: input.orgId,
@@ -40,16 +40,16 @@ export class BankTxnService {
       updatedAt: new Date().toISOString()
     };
 
-    this.store.addBankTransaction(txn);
+    await Promise.resolve(this.store.addBankTransaction(txn));
     return txn;
   }
 
-  get(id: string) {
-    return this.store.getBankTransaction(id);
+  async get(id: string): Promise<BankTransaction | undefined> {
+    return Promise.resolve(this.store.getBankTransaction(id));
   }
 
-  list(orgId: string, filters?: { status?: BankTxnStatus; bankAccountId?: string }) {
-    let txns = this.store.listBankTransactions(orgId);
+  async list(orgId: string, filters?: { status?: BankTxnStatus; bankAccountId?: string }): Promise<BankTransaction[]> {
+    let txns = await Promise.resolve(this.store.listBankTransactions(orgId));
     if (filters?.status) {
       txns = txns.filter((t) => t.status === filters.status);
     }
@@ -59,17 +59,18 @@ export class BankTxnService {
     return txns;
   }
 
-  categorize(id: string, category: string, accountId: string, actorId: string) {
-    const txn = this.store.getBankTransaction(id);
+  async categorize(id: string, category: string, accountId: string, actorId: string): Promise<BankTransaction> {
+    const txn = await Promise.resolve(this.store.getBankTransaction(id));
     if (!txn) throw new Error("BankTransaction not found");
 
-    const updated = this.store.updateBankTransaction(id, {
+    await Promise.resolve(this.store.updateBankTransaction(id, {
       category,
       accountId,
       status: "categorized"
-    });
+    }));
+    const updated = await Promise.resolve(this.store.getBankTransaction(id));
 
-    this.audit.log({
+    await this.audit.log({
       orgId: txn.orgId,
       actorId,
       action: "categorize",
@@ -78,15 +79,16 @@ export class BankTxnService {
       after: { category, accountId }
     });
 
-    return updated;
+    return updated!;
   }
 
-  markReconciled(id: string, actorId: string) {
-    const txn = this.store.getBankTransaction(id);
+  async markReconciled(id: string, actorId: string): Promise<BankTransaction> {
+    const txn = await Promise.resolve(this.store.getBankTransaction(id));
     if (!txn) throw new Error("BankTransaction not found");
 
-    const updated = this.store.updateBankTransaction(id, { status: "reconciled" });
-    this.audit.log({
+    await Promise.resolve(this.store.updateBankTransaction(id, { status: "reconciled" }));
+    const updated = await Promise.resolve(this.store.getBankTransaction(id));
+    await this.audit.log({
       orgId: txn.orgId,
       actorId,
       action: "mark_reconciled",
@@ -94,10 +96,10 @@ export class BankTxnService {
       entityId: id
     });
 
-    return updated;
+    return updated!;
   }
 
-  bulkImportCsv(orgId: string, bankAccountId: string, currency: string, rows: CsvRow[]) {
+  async bulkImportCsv(orgId: string, bankAccountId: string, currency: string, rows: CsvRow[]): Promise<BankTransaction[]> {
     const created: BankTransaction[] = [];
 
     for (const row of rows) {
@@ -110,7 +112,7 @@ export class BankTxnService {
           ? "debit"
           : "credit";
 
-      const txn = this.create({
+      const txn = await this.create({
         orgId,
         bankAccountId,
         date: row.date,
@@ -125,8 +127,8 @@ export class BankTxnService {
     return created;
   }
 
-  splitTransaction(id: string, splits: { amount: number; category: string; accountId: string }[], actorId: string) {
-    const txn = this.store.getBankTransaction(id);
+  async splitTransaction(id: string, splits: { amount: number; category: string; accountId: string }[], actorId: string): Promise<BankTransaction[]> {
+    const txn = await Promise.resolve(this.store.getBankTransaction(id));
     if (!txn) throw new Error("BankTransaction not found");
 
     const totalSplit = splits.reduce((s, sp) => s + sp.amount, 0);
@@ -153,14 +155,14 @@ export class BankTxnService {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
-      this.store.addBankTransaction(newTxn);
+      await Promise.resolve(this.store.addBankTransaction(newTxn));
       created.push(newTxn);
     }
 
     // Mark original as reconciled (it's been split)
-    this.store.updateBankTransaction(id, { status: "reconciled" });
+    await Promise.resolve(this.store.updateBankTransaction(id, { status: "reconciled" }));
 
-    this.audit.log({
+    await this.audit.log({
       orgId: txn.orgId,
       actorId,
       action: "split",
@@ -172,8 +174,8 @@ export class BankTxnService {
     return created;
   }
 
-  summary(orgId: string, startDate?: string, endDate?: string) {
-    let txns = this.store.listBankTransactions(orgId);
+  async summary(orgId: string, startDate?: string, endDate?: string) {
+    let txns = await Promise.resolve(this.store.listBankTransactions(orgId));
     if (startDate) txns = txns.filter((t) => t.date >= startDate);
     if (endDate) txns = txns.filter((t) => t.date <= endDate);
 

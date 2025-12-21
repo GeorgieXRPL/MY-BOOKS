@@ -100,7 +100,7 @@ export class OCRService {
     // Step 3: Create invoice if requested
     let invoice: Invoice | undefined;
     if (autoCreate) {
-      invoice = this.createInvoiceFromExtracted(extracted, {
+      invoice = await this.createInvoiceFromExtracted(extracted, {
         orgId,
         userId,
         invoiceType,
@@ -120,7 +120,7 @@ export class OCRService {
   /**
    * Create an invoice from extracted data
    */
-  createInvoiceFromExtracted(
+  async createInvoiceFromExtracted(
     extracted: ExtractedInvoice,
     options: {
       orgId: string;
@@ -129,7 +129,7 @@ export class OCRService {
       defaultAccountId?: string;
       receiptUrl?: string;
     }
-  ): Invoice {
+  ): Promise<Invoice> {
     const { orgId, userId, invoiceType, defaultAccountId, receiptUrl } = options;
 
     // Map extracted line items to invoice line items
@@ -160,7 +160,7 @@ export class OCRService {
     const dueDate = extracted.dueDate || this.calculateDueDate(issueDate, 30);
 
     // Create the invoice
-    const invoice = this.invoiceService.create({
+    const invoice = await this.invoiceService.create({
       orgId,
       type: invoiceType,
       counterpartyId: this.generateCounterpartyId(extracted.vendorName),

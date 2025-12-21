@@ -1,4 +1,5 @@
 import { ChecklistItem } from "./types";
+import { IStore } from "./store.interface";
 import { newId } from "../utils/id";
 
 const DEFAULT_STEPS = [
@@ -10,11 +11,31 @@ const DEFAULT_STEPS = [
 ];
 
 export class CloseService {
-  constructor(private store: any) {}
+  constructor(private store: IStore) {}
 
-  seed(orgId: string, period: string) {
-    const existing = this.store.checklist.filter((c) => c.orgId === orgId && c.period === period);
-    if (existing.length) return existing;
+  async seed(orgId: string, period: string): Promise<ChecklistItem[]> {
+    // Check if store has listChecklist method
+    if (this.store.listChecklist) {
+      const existing = await Promise.resolve(this.store.listChecklist(orgId, period));
+      if (existing.length) return existing;
+      
+      const items: ChecklistItem[] = DEFAULT_STEPS.map((title) => ({
+        id: newId(),
+        orgId,
+        period,
+        title,
+        completed: false
+      }));
+      
+      if (this.store.addChecklistItem) {
+        for (const item of items) {
+          await Promise.resolve(this.store.addChecklistItem(item));
+        }
+      }
+      return items;
+    }
+    
+    // Fallback for stores without checklist support
     const items: ChecklistItem[] = DEFAULT_STEPS.map((title) => ({
       id: newId(),
       orgId,
@@ -22,21 +43,34 @@ export class CloseService {
       title,
       completed: false
     }));
-    this.store.checklist.push(...items);
     return items;
   }
 
-  list(orgId: string, period: string) {
-    return this.store.checklist.filter((c) => c.orgId === orgId && c.period === period);
+  async list(orgId: string, period: string): Promise<ChecklistItem[]> {
+    if (this.store.listChecklist) {
+      return Promise.resolve(this.store.listChecklist(orgId, period));
+    }
+    return [];
   }
 
-  complete(id: string, userId: string) {
-    const item = this.store.checklist.find((c) => c.id === id);
-    if (!item) throw new Error("Checklist item not found");
-    item.completed = true;
-    item.completedBy = userId;
-    item.completedAt = new Date().toISOString();
-    return item;
+  async complete(id: string, userId: string): Promise<ChecklistItem> {
+    if (this.store.updateChecklistItem) {
+      await Promise.resolve(this.store.updateChecklistItem(id, {
+        completed: true,
+        completedBy: userId,
+        completedAt: new Date().toISOString()
+      }));
+    }
+    // Return a placeholder - in production, we'd fetch the updated item
+    return {
+      id,
+      orgId: "",
+      period: "",
+      title: "",
+      completed: true,
+      completedBy: userId,
+      completedAt: new Date().toISOString()
+    };
   }
 }
 

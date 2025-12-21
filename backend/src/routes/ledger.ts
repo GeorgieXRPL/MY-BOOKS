@@ -1,11 +1,12 @@
 import { Router } from "express";
 import { z } from "zod";
 import { LedgerService, DraftInput } from "../core/ledger";
+import { IStore } from "../core/store.interface";
 import { requireRoles } from "../middleware/auth";
 import { newId } from "../utils/id";
 import { parsePagination, paginateArray } from "../utils/pagination";
 
-export const buildLedgerRouter = (ledger: LedgerService, store: any) => {
+export const buildLedgerRouter = (ledger: LedgerService, store: IStore) => {
   const router = Router();
 
   const journalSchema = z.object({
@@ -31,68 +32,69 @@ export const buildLedgerRouter = (ledger: LedgerService, store: any) => {
     )
   });
 
-  router.post("/journals", requireRoles(["poster", "admin"]), (req, res) => {
+  router.post("/journals", requireRoles(["poster", "admin"]), async (req, res) => {
     const parsed = journalSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json(parsed.error);
     try {
-      const journal = ledger.createDraft(parsed.data as DraftInput);
+      const journal = await ledger.createDraft(parsed.data as DraftInput);
       return res.json(journal);
     } catch (err: any) {
       return res.status(400).json({ error: err.message });
     }
   });
 
-  router.post("/journals/:id/review", requireRoles(["approver", "admin"]), (req, res) => {
+  router.post("/journals/:id/review", requireRoles(["approver", "admin"]), async (req, res) => {
     const reviewerId = (req.body?.reviewerId as string) ?? (req as any).user?.id;
     try {
-      const journal = ledger.review(req.params.id, reviewerId);
+      const journal = await ledger.review(req.params.id, reviewerId);
       return res.json(journal);
     } catch (err: any) {
       return res.status(400).json({ error: err.message });
     }
   });
 
-  router.post("/journals/:id/post", requireRoles(["poster", "admin"]), (req, res) => {
+  router.post("/journals/:id/post", requireRoles(["poster", "admin"]), async (req, res) => {
     const posterId = (req.body?.posterId as string) ?? (req as any).user?.id;
     try {
-      const journal = ledger.post(req.params.id, posterId);
+      const journal = await ledger.post(req.params.id, posterId);
       return res.json(journal);
     } catch (err: any) {
       return res.status(400).json({ error: err.message });
     }
   });
 
-  router.post("/periods/:period/lock", requireRoles(["admin", "approver"]), (req, res) => {
+  router.post("/periods/:period/lock", requireRoles(["admin", "approver"]), async (req, res) => {
     const { orgId, lockedBy } = req.body ?? {};
     if (!orgId) return res.status(400).json({ error: "orgId required" });
     try {
-      ledger.lockPeriod(orgId, req.params.period, lockedBy ?? (req as any).user?.id);
+      await ledger.lockPeriod(orgId, req.params.period, lockedBy ?? (req as any).user?.id);
       return res.json({ ok: true });
     } catch (err: any) {
       return res.status(400).json({ error: err.message });
     }
   });
 
-  router.get("/journals", requireRoles(["viewer", "admin", "approver", "poster"]), (req, res) => {
+  router.get("/journals", requireRoles(["viewer", "admin", "approver", "poster"]), async (req, res) => {
     const orgId = (req.query.orgId as string) || "demo-org";
     const pagination = parsePagination(req, 50, 200);
     
     // Get all journals (in production, this would be a paginated DB query)
-    const allJournals = ledger.list(orgId);
+    const allJournals = await ledger.list(orgId);
     
     // Apply pagination
     const result = paginateArray(allJournals, pagination);
     res.json(result);
   });
 
-  router.get("/accounts", requireRoles(["viewer", "admin", "approver", "poster"]), (req, res) => {
+  router.get("/accounts", requireRoles(["viewer", "admin", "approver", "poster"]), async (req, res) => {
     const orgId = (req.query.orgId as string) || "demo-org";
-    res.json(store.listAccounts(orgId));
+    const accounts = await Promise.resolve(store.listAccounts(orgId));
+    res.json(accounts);
   });
 
-  router.post("/accounts", requireRoles(["admin"]), (req, res) => {
+  router.post("/accounts", requireRoles(["admin"]), async (req, res) => {
     try {
-      const account = store.upsertAccount({
+      await Promise.resolve(store.upsertAccount({
         id: newId(),
         orgId: req.body.orgId || "demo-org",
         code: req.body.code,
@@ -100,8 +102,8 @@ export const buildLedgerRouter = (ledger: LedgerService, store: any) => {
         type: req.body.type,
         currency: req.body.currency || "USD",
         isActive: req.body.isActive !== false
-      });
-      res.status(201).json(account);
+      }));
+      res.status(201).json({ success: true });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
     }
