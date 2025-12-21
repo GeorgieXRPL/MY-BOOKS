@@ -6,6 +6,29 @@ This is a **full-stack accounting and financial reporting application** designed
 
 ---
 
+## Current Status & Known Issues
+
+### ⚠️ Critical: Async/Sync Migration Required
+
+**Status:** The codebase was originally built with synchronous SQLite operations. PostgreSQL (Supabase) requires async operations. Only `AuthService` has been migrated to async.
+
+**Impact:** Most services fail when using PostgreSQL. Frontend shows empty data.
+
+**Next Step:** Complete the async refactor (see `ASYNC_REFACTOR_PLAN.md`)
+
+### ✅ What's Working
+- Authentication (register, login, token refresh)
+- Frontend navigation (no crashes)
+- Database connection to Supabase
+- CORS configuration
+
+### ❌ What Needs Fixing
+- All services except AuthService need async refactor
+- Backend returns 400 errors for most data operations
+- See `ISSUES_AND_LESSONS.md` for full list
+
+---
+
 ## Tech Stack
 
 | Layer     | Technology                                   |
@@ -47,7 +70,10 @@ This is a **full-stack accounting and financial reporting application** designed
 │   └── vite.config.ts          # Vite bundler configuration
 │
 ├── Scope & Objectives.md       # Project requirements document
-└── CODEBASE_INDEX.md           # This file
+├── CODEBASE_INDEX.md           # This file
+├── DEPLOYMENT.md               # Deployment guide (Render, Supabase, Vercel)
+├── ISSUES_AND_LESSONS.md       # Known issues and lessons learned
+└── ASYNC_REFACTOR_PLAN.md      # Plan for async service migration
 ```
 
 ---
