@@ -425,10 +425,22 @@ npm run preview # Preview production build
 
 ## Deployment
 
-- **Backend**: Railway (see `railway.json`)
-- **Frontend**: Vercel (see `vercel.json`)
+| Component | Service | Configuration |
+|-----------|---------|---------------|
+| **Database** | Supabase | PostgreSQL (free tier) |
+| **Backend** | Render | See environment variables below |
+| **Frontend** | Vercel | `vercel.json` |
+| **Cache** | Upstash | Redis (optional) |
+| **File Storage** | Cloudflare R2 | For OCR uploads (optional) |
 
-See `DEPLOYMENT.md` for detailed deployment instructions.
+See `DEPLOYMENT.md` for detailed step-by-step deployment instructions.
+
+### Quick Deploy Checklist
+
+1. Create Supabase project → Get `DATABASE_URL`
+2. Deploy backend to Render → Add environment variables
+3. Deploy frontend to Vercel → Set `VITE_API_BASE_URL`
+4. Update `ALLOWED_ORIGINS` on Render with Vercel URL
 
 
 

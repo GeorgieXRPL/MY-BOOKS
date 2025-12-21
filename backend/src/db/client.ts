@@ -2,6 +2,10 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as schema from "./schema";
 import { logger } from "../utils/logger";
+import dns from "dns";
+
+// Force IPv4 for DNS resolution (Render free tier doesn't support IPv6 outbound)
+dns.setDefaultResultOrder("ipv4first");
 
 let pool: Pool | null = null;
 let db: ReturnType<typeof drizzle> | null = null;
@@ -17,7 +21,7 @@ export function getPool(): Pool {
       connectionString,
       max: 20, // Maximum number of connections
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
+      connectionTimeoutMillis: 10000, // Increased timeout for cold starts
     });
     
     pool.on("error", (err) => {

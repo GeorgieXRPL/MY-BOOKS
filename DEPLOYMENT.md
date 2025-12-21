@@ -1,404 +1,509 @@
 # Deployment & Hosting Guide
 
-This guide covers how to deploy your accounting application for production use.
+This guide covers how to deploy your accounting application using the **Simple Stack**:
+
+| Service | Purpose | Cost |
+|---------|---------|------|
+| **Supabase** | PostgreSQL Database | Free tier (500MB) |
+| **Render** | Backend Hosting | Free tier / ~$7/mo |
+| **Vercel** | Frontend Hosting | Free tier |
+| **Cloudflare R2** | File Storage (OCR) | Free tier (10GB) |
+| **Upstash** | Redis Cache | Free tier (10K/day) |
+
+---
 
 ## Table of Contents
 
-1. [Prerequisites](#prerequisites)
-2. [Environment Configuration](#environment-configuration)
-3. [Deployment Options](#deployment-options)
-4. [Security Checklist](#security-checklist)
-5. [Database Backups](#database-backups)
-6. [Monetization Setup](#monetization-setup)
+1. [Quick Start](#quick-start)
+2. [Phase 1: Database Setup (Supabase)](#phase-1-database-setup-supabase)
+3. [Phase 2: Backend Deployment (Render)](#phase-2-backend-deployment-render)
+4. [Phase 3: Frontend Deployment (Vercel)](#phase-3-frontend-deployment-vercel)
+5. [Phase 4: Connect Frontend to Backend](#phase-4-connect-frontend-to-backend)
+6. [Phase 5: Optional Services](#phase-5-optional-services)
+7. [Testing Your Deployment](#testing-your-deployment)
+8. [Environment Variables Reference](#environment-variables-reference)
+9. [Troubleshooting](#troubleshooting)
+10. [Security Checklist](#security-checklist)
+11. [Local Development](#local-development)
 
 ---
 
-## Prerequisites
+## Quick Start
 
-### Required
-- Node.js 18+ (LTS recommended)
-- npm or yarn
-- Domain name (for production)
-- SSL certificate (Let's Encrypt is free)
+If you already have accounts set up, here's the TL;DR:
 
-### Recommended
-- Reverse proxy (nginx, Caddy)
-- Process manager (PM2, systemd)
-- Monitoring (uptime, errors)
-
----
-
-## Environment Configuration
-
-### Backend (.env)
-
-Create `backend/.env` with production values:
-
-```env
-# Server
-PORT=4000
-NODE_ENV=production
-
-# SECURITY - CHANGE THESE!
-JWT_SECRET=your-very-long-random-secret-at-least-32-characters
-WEBHOOK_SECRET=another-random-secret-for-webhooks
-
-# Database
-DATABASE_PATH=./data/production.db
-
-# Default org (for first user registration)
-DEFAULT_ORG=your-company
-DEFAULT_CURRENCY=USD
-
-# Optional: External APIs
-COINGECKO_API_KEY=your-api-key-if-needed
-```
-
-**Generate secure secrets:**
 ```bash
-# JWT Secret (run this twice for two different secrets)
+# Generate secrets (run twice)
 node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 ```
 
-### Frontend (.env)
-
-Create `frontend/.env`:
-
+**Render Environment Variables:**
 ```env
-VITE_API_BASE_URL=https://api.yourdomain.com
+DATABASE_URL=postgresql://postgres.xxx:[PASSWORD]@aws-0-xx.pooler.supabase.com:5432/postgres
+NODE_ENV=production
+JWT_SECRET=<64-char-secret>
+WEBHOOK_SECRET=<another-secret>
+ALLOWED_ORIGINS=https://your-app.vercel.app
+```
+
+**Vercel Environment Variable:**
+```env
+VITE_API_BASE_URL=https://your-app.onrender.com
 ```
 
 ---
 
-## Deployment Options
+## Phase 1: Database Setup (Supabase)
 
-### Option 1: VPS (DigitalOcean, Linode, Vultr)
+### Step 1.1: Create Supabase Account
 
-**Best for:** Full control, cost-effective for small teams
+1. Go to [supabase.com](https://supabase.com)
+2. Click **"Start your project"**
+3. Sign up with GitHub (recommended) or email
 
-**Cost:** ~$5-12/month
+### Step 1.2: Create a New Project
 
+1. Click **"New Project"**
+2. Fill in:
+   - **Name:** `reporting-software`
+   - **Database Password:** Click "Generate" → **SAVE THIS PASSWORD!**
+   - **Region:** Choose closest to your users (e.g., US East, EU West)
+3. Click **"Create new project"**
+4. Wait 1-2 minutes for setup
+
+### Step 1.3: Get Your Connection String
+
+**Method A: Via Connect Button (Easiest)**
+1. In your project dashboard, click the **"Connect"** button (top right)
+2. Select **"URI"** tab
+3. Copy the connection string
+4. Replace `[YOUR-PASSWORD]` with the password you saved
+
+**Method B: Via Project Settings**
+1. Click the **⚙️ Settings** icon (bottom of left sidebar)
+2. Click **"Database"** in the menu
+3. Scroll to **"Connection string"** section
+4. Select the **"URI"** tab
+5. Copy and replace `[YOUR-PASSWORD]`
+
+**Your connection string looks like:**
+```
+postgresql://postgres.abcdefghij:[YOUR-PASSWORD]@aws-0-us-east-1.pooler.supabase.com:5432/postgres
+```
+
+**⚠️ Important:** 
+- Use the **pooler** connection (6543) for production
+- Save this string securely - you'll need it for Render
+
+### Step 1.4: Forgot Your Password?
+
+1. Go to **Settings** → **Database**
+2. Click **"Reset database password"**
+3. Generate and save the new password
+4. Update your connection string
+
+---
+
+## Phase 2: Backend Deployment (Render)
+
+### Step 2.1: Create Render Account
+
+1. Go to [render.com](https://render.com)
+2. Click **"Get Started for Free"**
+3. Sign up with GitHub (recommended for auto-deploy)
+
+### Step 2.2: Create a New Web Service
+
+1. Click **"New +"** → **"Web Service"**
+2. Connect your GitHub repository
+3. Select the repository containing your reporting software
+
+### Step 2.3: Configure Build Settings
+
+| Setting | Value |
+|---------|-------|
+| **Name** | `reporting-api` (or your preference) |
+| **Region** | Same as Supabase (e.g., Ohio, Frankfurt) |
+| **Branch** | `main` |
+| **Root Directory** | `backend` |
+| **Runtime** | `Node` |
+| **Build Command** | `npm install && npm run build` |
+| **Start Command** | `npm start` |
+| **Instance Type** | Free (or Starter $7/mo for production) |
+
+### Step 2.4: Add Environment Variables
+
+Click **"Advanced"** → **"Add Environment Variable"**
+
+**Required Variables:**
+
+| Key | Value |
+|-----|-------|
+| `NODE_ENV` | `production` |
+| `PORT` | `4000` |
+| `DATABASE_URL` | `postgresql://postgres.xxx:[PASSWORD]@...` (from Supabase) |
+| `JWT_SECRET` | Generate with command below |
+| `WEBHOOK_SECRET` | Generate with command below |
+| `PRICE_PROVIDER` | `coingecko` |
+| `DEFAULT_CURRENCY` | `USD` |
+
+**Generate Secrets:**
 ```bash
-# 1. SSH into your server
-ssh user@your-server
-
-# 2. Install Node.js
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-sudo apt-get install -y nodejs
-
-# 3. Clone your repo
-git clone https://github.com/yourrepo/accounting-app.git
-cd accounting-app
-
-# 4. Install dependencies
-cd backend && npm install --production
-cd ../frontend && npm install && npm run build
-
-# 5. Install PM2 for process management
-sudo npm install -g pm2
-
-# 6. Start the backend
-cd ../backend
-pm2 start npm --name "accounting-api" -- start
-pm2 save
-pm2 startup
-
-# 7. Set up nginx reverse proxy
-sudo apt install nginx
+# Run this twice - once for JWT_SECRET, once for WEBHOOK_SECRET
+node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 ```
 
-**Nginx config (`/etc/nginx/sites-available/accounting`):**
+### Step 2.5: Deploy
 
-```nginx
-server {
-    listen 80;
-    server_name api.yourdomain.com;
-    return 301 https://$server_name$request_uri;
-}
+1. Click **"Create Web Service"**
+2. Wait for build (3-5 minutes first time)
+3. Once deployed, you'll get a URL like:
+   ```
+   https://reporting-api-xxxx.onrender.com
+   ```
+4. **Save this URL!** You'll need it for the frontend.
 
-server {
-    listen 443 ssl http2;
-    server_name api.yourdomain.com;
+### Step 2.6: Verify Backend is Running
 
-    ssl_certificate /etc/letsencrypt/live/api.yourdomain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/api.yourdomain.com/privkey.pem;
+Visit: `https://your-app.onrender.com/health`
 
-    location / {
-        proxy_pass http://localhost:4000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
-
-server {
-    listen 443 ssl http2;
-    server_name app.yourdomain.com;
-
-    ssl_certificate /etc/letsencrypt/live/app.yourdomain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/app.yourdomain.com/privkey.pem;
-
-    root /var/www/accounting-frontend;
-    index index.html;
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-}
-```
-
-**SSL with Certbot:**
-```bash
-sudo apt install certbot python3-certbot-nginx
-sudo certbot --nginx -d api.yourdomain.com -d app.yourdomain.com
+You should see:
+```json
+{"status":"ok","timestamp":"2024-12-18T..."}
 ```
 
 ---
 
-### Option 2: Docker Compose
+## Phase 3: Frontend Deployment (Vercel)
 
-**Best for:** Easy deployment, reproducible environments
+### Step 3.1: Create Vercel Account
 
-Create `docker-compose.yml` in project root:
+1. Go to [vercel.com](https://vercel.com)
+2. Click **"Sign Up"**
+3. Sign up with GitHub
 
-```yaml
-version: '3.8'
+### Step 3.2: Import Your Project
 
-services:
-  backend:
-    build: ./backend
-    ports:
-      - "4000:4000"
-    environment:
-      - NODE_ENV=production
-      - JWT_SECRET=${JWT_SECRET}
-      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
-    volumes:
-      - ./data:/app/data
-    restart: unless-stopped
+1. Click **"Add New..."** → **"Project"**
+2. Import your GitHub repository
+3. Click **"Import"**
 
-  frontend:
-    build: ./frontend
-    ports:
-      - "3000:80"
-    depends_on:
-      - backend
-    restart: unless-stopped
+### Step 3.3: Configure Build Settings
 
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
-      - ./certs:/etc/nginx/certs
-    depends_on:
-      - backend
-      - frontend
-    restart: unless-stopped
-```
+| Setting | Value |
+|---------|-------|
+| **Framework Preset** | `Vite` |
+| **Root Directory** | `frontend` |
+| **Build Command** | `npm run build` |
+| **Output Directory** | `dist` |
 
-**Backend Dockerfile (`backend/Dockerfile`):**
+### Step 3.4: Add Environment Variable
 
-```dockerfile
-FROM node:18-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --production
-COPY . .
-RUN npm run build
-EXPOSE 4000
-CMD ["npm", "start"]
-```
+Expand **"Environment Variables"** and add:
 
-**Frontend Dockerfile (`frontend/Dockerfile`):**
+| Key | Value |
+|-----|-------|
+| `VITE_API_BASE_URL` | `https://your-app.onrender.com` |
 
-```dockerfile
-FROM node:18-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN npm run build
+**⚠️ No trailing slash!** ✅ `https://api.com` ❌ `https://api.com/`
 
-FROM nginx:alpine
-COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
-```
+### Step 3.5: Deploy
 
-**Deploy:**
-```bash
-docker-compose up -d --build
-```
+1. Click **"Deploy"**
+2. Wait 1-2 minutes
+3. Get your frontend URL:
+   ```
+   https://your-app.vercel.app
+   ```
 
 ---
 
-### Option 3: Railway / Render / Fly.io
+## Phase 4: Connect Frontend to Backend
 
-**Best for:** Quick deployment, managed infrastructure
+### Step 4.1: Update CORS on Render
 
-**Cost:** Free tier available, ~$5-25/month for production
+Go back to Render → your service → **Environment**
 
-**Railway:**
-1. Connect your GitHub repo
-2. Add environment variables in dashboard
-3. Deploy automatically on push
+Add or update:
+```
+ALLOWED_ORIGINS=https://your-app.vercel.app
+```
 
-**Render:**
-1. Create Web Service for backend
-2. Create Static Site for frontend
-3. Add environment variables
+Multiple origins (include localhost for development):
+```
+ALLOWED_ORIGINS=https://your-app.vercel.app,http://localhost:5173
+```
+
+Render will auto-redeploy.
+
+### Step 4.2: Test the Connection
+
+1. Go to your Vercel frontend URL
+2. You should see the login page
+3. Try registering a new account
+4. If successful, check Supabase → Table Editor → `users` table
 
 ---
 
-### Option 4: Self-hosted with Coolify
+## Phase 5: Optional Services
 
-**Best for:** Teams who want control without complexity
+These unlock additional features. Add them as needed.
 
-[Coolify](https://coolify.io) is a self-hosted Heroku/Netlify alternative.
+### 5A: OpenAI (OCR + AI Chatbot)
 
-1. Install Coolify on your VPS
-2. Connect your Git repository
-3. Configure environment variables
-4. Deploy with one click
+**Required for:** Invoice scanning, AI assistant
+
+1. Go to [platform.openai.com](https://platform.openai.com)
+2. Sign up / Log in
+3. Go to **API Keys** → **Create new secret key**
+4. Add to Render:
+   ```
+   OPENAI_API_KEY=sk-proj-...
+   ```
+
+### 5B: Alchemy (EVM Blockchain Data)
+
+**Required for:** Ethereum, Polygon, Arbitrum TX auto-population
+
+1. Go to [alchemy.com](https://www.alchemy.com)
+2. Sign up → Create App (Ethereum Mainnet)
+3. Copy API key
+4. Add to Render:
+   ```
+   ALCHEMY_API_KEY=your-key
+   ```
+
+### 5C: Helius (Solana Data)
+
+**Required for:** Solana TX auto-population
+
+1. Go to [helius.dev](https://www.helius.dev)
+2. Sign up → Get API key
+3. Add to Render:
+   ```
+   HELIUS_API_KEY=your-key
+   ```
+
+### 5D: Cloudflare R2 (File Storage)
+
+**Required for:** Storing uploaded invoice images
+
+1. Go to [cloudflare.com](https://cloudflare.com) → Sign up
+2. Dashboard → **R2** → **Create bucket**
+3. Name: `reporting-uploads`
+4. **R2** → **Manage R2 API Tokens** → **Create API token**
+5. Permissions: Object Read & Write
+6. Add to Render:
+   ```
+   R2_ACCOUNT_ID=your-account-id
+   R2_ACCESS_KEY_ID=your-access-key
+   R2_SECRET_ACCESS_KEY=your-secret-key
+   R2_BUCKET_NAME=reporting-uploads
+   ```
+
+### 5E: Upstash Redis (Caching)
+
+**Required for:** Report caching, improved performance
+
+1. Go to [upstash.com](https://upstash.com) → Sign up
+2. Create a new Redis database
+3. Choose region near your Render deployment
+4. Copy REST URL and Token
+5. Add to Render:
+   ```
+   UPSTASH_REDIS_URL=https://xxx.upstash.io
+   UPSTASH_REDIS_TOKEN=your-token
+   ```
+
+---
+
+## Testing Your Deployment
+
+### Health Checks
+
+| Endpoint | Expected Response |
+|----------|-------------------|
+| `GET /health` | `{"status":"ok"}` |
+| `GET /invoices/ocr/status` | `{"configured":true/false}` |
+| `GET /chat/status` | `{"available":true/false}` |
+
+### Functional Tests
+
+1. **Register a new user** - Check user appears in Supabase
+2. **Create an account** - Go to Ledger → Add Account
+3. **Create a journal entry** - Go to Journals → Create Entry
+4. **Run a report** - Go to Reports → Balance Sheet
+5. **Test blockchain lookup** (if configured) - Ingestion → Paste TX hash
+
+### Common Issues
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Blank page | Frontend can't reach API | Check `VITE_API_BASE_URL` |
+| 401 errors | CORS blocking | Add frontend URL to `ALLOWED_ORIGINS` |
+| 500 errors | Database issue | Check `DATABASE_URL` in Render logs |
+| Tables missing | Migration didn't run | Check Render deploy logs for errors |
+
+---
+
+## Environment Variables Reference
+
+### Backend (Render)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `NODE_ENV` | ✅ | Set to `production` |
+| `PORT` | ✅ | `4000` |
+| `DATABASE_URL` | ✅ | Supabase PostgreSQL URI |
+| `JWT_SECRET` | ✅ | 64+ character random string |
+| `WEBHOOK_SECRET` | ✅ | Random string for webhook signing |
+| `ALLOWED_ORIGINS` | ✅ | Frontend URLs (comma-separated) |
+| `PRICE_PROVIDER` | | `coingecko` (default) |
+| `DEFAULT_CURRENCY` | | `USD` (default) |
+| `OPENAI_API_KEY` | | For OCR and AI chatbot |
+| `ALCHEMY_API_KEY` | | For EVM blockchain data |
+| `HELIUS_API_KEY` | | For Solana data |
+| `R2_ACCOUNT_ID` | | Cloudflare account ID |
+| `R2_ACCESS_KEY_ID` | | R2 access key |
+| `R2_SECRET_ACCESS_KEY` | | R2 secret key |
+| `R2_BUCKET_NAME` | | R2 bucket name |
+| `UPSTASH_REDIS_URL` | | Redis URL for caching |
+| `UPSTASH_REDIS_TOKEN` | | Redis auth token |
+| `ADMIN_IP_ALLOWLIST` | | IPs allowed to access /admin |
+
+### Frontend (Vercel)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `VITE_API_BASE_URL` | ✅ | Backend URL (no trailing slash) |
+
+---
+
+## Troubleshooting
+
+### "502 Bad Gateway" on Render
+
+1. Go to Render Dashboard → Your Service → **Logs**
+2. Look for error messages
+3. Common causes:
+   - Wrong `DATABASE_URL`
+   - Missing required env vars
+   - Build failed
+
+### "Failed to fetch" in Browser Console
+
+1. Open browser DevTools → Network tab
+2. Check if requests are going to correct URL
+3. Verify `VITE_API_BASE_URL` is set in Vercel
+4. Redeploy frontend after changing env vars
+
+### Database Tables Not Created
+
+1. Check Render logs for migration output
+2. Look for "Running migrations..." message
+3. If missing, the app may have failed to start
+4. Verify `DATABASE_URL` format is correct
+
+### CORS Errors
+
+Error: `Access to fetch at 'X' from origin 'Y' has been blocked by CORS`
+
+1. Add your frontend URL to `ALLOWED_ORIGINS` on Render
+2. Include the full URL with `https://`
+3. No trailing slash
+4. Wait for Render to redeploy
+
+### Render Free Tier Spin-Down
+
+Free tier services sleep after 15 minutes of inactivity.
+
+- First request after sleep takes ~30 seconds
+- Consider upgrading to Starter ($7/mo) for always-on
+- Or use a service like [UptimeRobot](https://uptimerobot.com) to ping every 14 minutes
 
 ---
 
 ## Security Checklist
 
-### Must Do (Critical)
+### Must Do (Before Going Live)
 
-- [ ] **Change JWT_SECRET** - Use a cryptographically random 64+ character string
-- [ ] **Enable HTTPS** - Never run without SSL in production
-- [ ] **Set NODE_ENV=production** - Disables debug features
-- [ ] **Use strong passwords** - Enforce minimum 8 characters
-- [ ] **Backup database** - Set up automated backups
+- [ ] Generate unique `JWT_SECRET` (64+ characters)
+- [ ] Generate unique `WEBHOOK_SECRET`
+- [ ] Set `NODE_ENV=production`
+- [ ] Configure `ALLOWED_ORIGINS` (only your domains)
+- [ ] Use HTTPS (automatic on Render/Vercel)
+- [ ] Create strong admin password
 
 ### Should Do (Recommended)
 
-- [ ] **Rate limiting** - Prevent brute force attacks
-- [ ] **CORS configuration** - Only allow your frontend domain
-- [ ] **HTTP security headers** - Use helmet.js
-- [ ] **Input validation** - Already using Zod, ensure coverage
-- [ ] **Audit logging** - Already implemented, review regularly
-- [ ] **Two-factor authentication** - MFA stub exists, implement TOTP
+- [ ] Set up `ADMIN_IP_ALLOWLIST` for admin panel
+- [ ] Configure API keys for programmatic access
+- [ ] Enable Redis caching for performance
+- [ ] Set up monitoring (Render has built-in metrics)
+- [ ] Review audit logs regularly
 
 ### Nice to Have
 
-- [ ] **IP allowlisting** - For internal apps
-- [ ] **VPN access** - For sensitive deployments
-- [ ] **Penetration testing** - Annual security audit
-- [ ] **SOC 2 compliance** - For enterprise clients
+- [ ] Custom domain for frontend
+- [ ] Custom domain for API
+- [ ] Implement MFA for admin users
+- [ ] Set up database backups (Supabase Pro)
 
 ---
 
-## Database Backups
+## Local Development
 
-### Automated SQLite Backups
-
-Create `backup.sh`:
+### Backend
 
 ```bash
-#!/bin/bash
-BACKUP_DIR="/backups/accounting"
-DB_PATH="/app/data/production.db"
-DATE=$(date +%Y%m%d_%H%M%S)
+cd backend
 
-mkdir -p $BACKUP_DIR
-sqlite3 $DB_PATH ".backup '$BACKUP_DIR/backup_$DATE.db'"
+# Create environment file
+cp ENV_EXAMPLE.txt .env
 
-# Keep last 30 days
-find $BACKUP_DIR -name "*.db" -mtime +30 -delete
+# Edit .env - leave DATABASE_URL empty for SQLite
+nano .env
+
+# Install and run
+npm install
+npm run dev
 ```
 
-**Add to cron:**
-```bash
-0 2 * * * /path/to/backup.sh
-```
-
-### Cloud Backup (S3/R2)
+### Frontend
 
 ```bash
-#!/bin/bash
-# After local backup
-aws s3 cp /backups/accounting/backup_$DATE.db s3://your-bucket/backups/
+cd frontend
+
+# Create environment file
+echo "VITE_API_BASE_URL=http://localhost:4000" > .env
+
+# Install and run
+npm install
+npm run dev
 ```
+
+Open [http://localhost:5173](http://localhost:5173)
 
 ---
 
-## Monetization Setup
+## Infrastructure Summary
 
-### Option 1: Subscription Model (Stripe)
+After setup, your infrastructure looks like:
 
-1. Create Stripe account
-2. Set up Products and Prices:
-   - **Starter:** $29/month - 3 users, basic features
-   - **Professional:** $79/month - 10 users, all features
-   - **Enterprise:** Custom - unlimited users, support
-
-3. Integrate Stripe Checkout:
-
-```typescript
-// backend/src/routes/billing.ts
-import Stripe from 'stripe';
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-
-router.post('/create-checkout', async (req, res) => {
-  const session = await stripe.checkout.sessions.create({
-    mode: 'subscription',
-    payment_method_types: ['card'],
-    line_items: [{
-      price: req.body.priceId,
-      quantity: 1,
-    }],
-    success_url: `${process.env.FRONTEND_URL}/billing/success`,
-    cancel_url: `${process.env.FRONTEND_URL}/billing/cancel`,
-  });
-  res.json({ url: session.url });
-});
 ```
-
-### Option 2: Per-Seat Pricing
-
-Track active users per organization and bill accordingly.
-
-### Option 3: Feature-based Tiers
-
-- Free: Manual entry only
-- Pro: Crypto support, bank integrations
-- Enterprise: Custom formulas, API access, audit reports
-
----
-
-## Quick Start Commands
-
-```bash
-# Development
-cd backend && npm run dev
-cd frontend && npm run dev
-
-# Production build
-cd backend && npm run build
-cd frontend && npm run build
-
-# Start production
-cd backend && npm start
-
-# Docker
-docker-compose up -d --build
-
-# View logs
-pm2 logs accounting-api
-docker-compose logs -f
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│     Vercel      │────▶│     Render      │────▶│    Supabase     │
+│   (Frontend)    │     │   (Backend)     │     │  (PostgreSQL)   │
+│  your-app.      │     │  your-api.      │     │                 │
+│  vercel.app     │     │  onrender.com   │     │                 │
+└─────────────────┘     └────────┬────────┘     └─────────────────┘
+                                 │
+                    ┌────────────┼────────────┐
+                    ▼            ▼            ▼
+              ┌──────────┐ ┌──────────┐ ┌──────────┐
+              │ OpenAI   │ │ Alchemy  │ │ Upstash  │
+              │ (AI/OCR) │ │ (Crypto) │ │ (Cache)  │
+              └──────────┘ └──────────┘ └──────────┘
 ```
 
 ---
@@ -406,14 +511,11 @@ docker-compose logs -f
 ## Support
 
 For issues:
-1. Check the logs: `pm2 logs` or `docker-compose logs`
-2. Verify environment variables
-3. Ensure database file permissions
-4. Check network/firewall rules
+1. Check Render logs: Dashboard → Service → Logs
+2. Check Vercel logs: Dashboard → Project → Deployments → View Logs
+3. Check Supabase: Dashboard → Logs
+4. Verify all environment variables are set correctly
 
 ---
 
 *Last updated: December 2024*
-
-
-

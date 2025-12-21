@@ -73,11 +73,8 @@ export const generalRateLimit = rateLimit({
   message: { error: "Too many requests, please try again later" },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => {
-    // Use API key if present, otherwise IP
-    const apiKey = req.headers["x-api-key"] as string;
-    return apiKey || req.ip || "unknown";
-  },
+  // Use default keyGenerator which handles IPv6 properly
+  validate: { xForwardedForHeader: false },
   handler: (req, res) => {
     logger.warn("Rate limit exceeded", { ip: req.ip, path: req.path });
     res.status(429).json({ error: "Too many requests, please try again later" });
@@ -91,7 +88,8 @@ export const authRateLimit = rateLimit({
   message: { error: "Too many authentication attempts, please try again later" },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.ip || "unknown",
+  // Use default keyGenerator which handles IPv6 properly
+  validate: { xForwardedForHeader: false },
   handler: (req, res) => {
     logger.warn("Auth rate limit exceeded", { ip: req.ip });
     res.status(429).json({ error: "Too many authentication attempts, please try again later" });
