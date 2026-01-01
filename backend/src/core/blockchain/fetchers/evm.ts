@@ -11,25 +11,29 @@ import { logger } from "../../../utils/logger";
 const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY;
 const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY;
 
-// Network configurations
+// Network configurations with public RPC fallbacks
 const NETWORKS = {
   ethereum: {
-    alchemyUrl: `https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
+    alchemyUrl: ALCHEMY_API_KEY ? `https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}` : null,
+    publicRpcUrl: "https://eth.llamarpc.com", // Free public RPC
     etherscanUrl: "https://api.etherscan.io/api",
     chainId: 1
   },
   polygon: {
-    alchemyUrl: `https://polygon-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
+    alchemyUrl: ALCHEMY_API_KEY ? `https://polygon-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}` : null,
+    publicRpcUrl: "https://polygon.llamarpc.com",
     etherscanUrl: "https://api.polygonscan.com/api",
     chainId: 137
   },
   arbitrum: {
-    alchemyUrl: `https://arb-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
+    alchemyUrl: ALCHEMY_API_KEY ? `https://arb-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}` : null,
+    publicRpcUrl: "https://arbitrum.llamarpc.com",
     etherscanUrl: "https://api.arbiscan.io/api",
     chainId: 42161
   },
   base: {
-    alchemyUrl: `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
+    alchemyUrl: ALCHEMY_API_KEY ? `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}` : null,
+    publicRpcUrl: "https://base.llamarpc.com",
     etherscanUrl: "https://api.basescan.org/api",
     chainId: 8453
   }
@@ -59,23 +63,31 @@ interface EVMReceipt {
 }
 
 /**
- * Fetch EVM transaction using Alchemy JSON-RPC
+ * Fetch EVM transaction using JSON-RPC (Alchemy or public fallback)
  */
-async function fetchFromAlchemy(txHash: string, network: NetworkKey): Promise<FetcherResult> {
+async function fetchFromRPC(txHash: string, network: NetworkKey): Promise<FetcherResult> {
   const config = NETWORKS[network];
   
-  if (!ALCHEMY_API_KEY) {
-    return { success: false, error: "ALCHEMY_API_KEY not configured" };
+  // Use Alchemy if configured, otherwise use public RPC
+  const rpcUrl = config.alchemyUrl || config.publicRpcUrl;
+  
+  if (!rpcUrl) {
+    return { success: false, error: `No RPC endpoint available for ${network}` };
+  }
+
+  const isPublicRpc = !config.alchemyUrl;
+  if (isPublicRpc) {
+    logger.info(`Using public RPC for ${network} (no ALCHEMY_API_KEY configured)`);
   }
 
   try {
     // Get transaction
-    const txResponse = await axios.post(config.alchemyUrl, {
+    const txResponse = await axios.post(rpcUrl, {
       jsonrpc: "2.0",
       id: 1,
       method: "eth_getTransactionByHash",
       params: [txHash]
-    });
+    }, { timeout: 10000 });
 
     const tx = txResponse.data.result;
     if (!tx) {
@@ -83,22 +95,22 @@ async function fetchFromAlchemy(txHash: string, network: NetworkKey): Promise<Fe
     }
 
     // Get transaction receipt for status and gas used
-    const receiptResponse = await axios.post(config.alchemyUrl, {
+    const receiptResponse = await axios.post(rpcUrl, {
       jsonrpc: "2.0",
       id: 2,
       method: "eth_getTransactionReceipt",
       params: [txHash]
-    });
+    }, { timeout: 10000 });
 
     const receipt: EVMReceipt = receiptResponse.data.result;
 
     // Get block for timestamp
-    const blockResponse = await axios.post(config.alchemyUrl, {
+    const blockResponse = await axios.post(rpcUrl, {
       jsonrpc: "2.0",
       id: 3,
       method: "eth_getBlockByNumber",
       params: [tx.blockNumber, false]
-    });
+    }, { timeout: 10000 });
 
     const block = blockResponse.data.result;
     const blockTime = block ? new Date(parseInt(block.timestamp, 16) * 1000).toISOString() : undefined;
@@ -148,7 +160,7 @@ async function fetchFromAlchemy(txHash: string, network: NetworkKey): Promise<Fe
 export async function fetchEVMTransaction(txHash: string, preferredNetwork?: NetworkKey): Promise<FetcherResult> {
   // If preferred network specified, try that first
   if (preferredNetwork) {
-    const result = await fetchFromAlchemy(txHash, preferredNetwork);
+    const result = await fetchFromRPC(txHash, preferredNetwork);
     if (result.success) return result;
   }
 
@@ -158,14 +170,19 @@ export async function fetchEVMTransaction(txHash: string, preferredNetwork?: Net
   for (const network of networks) {
     if (network === preferredNetwork) continue; // Already tried
     
-    const result = await fetchFromAlchemy(txHash, network);
-    if (result.success) {
-      logger.info(`Found EVM tx on ${network}`, { txHash });
-      return result;
+    try {
+      const result = await fetchFromRPC(txHash, network);
+      if (result.success) {
+        logger.info(`Found EVM tx on ${network}`, { txHash });
+        return result;
+      }
+    } catch (err: any) {
+      logger.warn(`Failed to check ${network}`, { error: err.message });
+      // Continue to next network
     }
   }
 
-  return { success: false, error: "Transaction not found on any EVM network" };
+  return { success: false, error: "Transaction not found on any EVM network. Try again in a moment." };
 }
 
 /**
