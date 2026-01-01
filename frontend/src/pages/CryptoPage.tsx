@@ -45,6 +45,49 @@ const CryptoPage = () => {
   });
   const [gainResult, setGainResult] = useState<any>(null);
   const [status, setStatus] = useState("");
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupResult, setLookupResult] = useState<any>(null);
+
+  // Lookup blockchain transaction and auto-populate form
+  const lookupTxHash = async () => {
+    if (!form.txHash.trim()) {
+      setStatus("Please enter a transaction hash");
+      return;
+    }
+
+    setLookupLoading(true);
+    setStatus("🔍 Looking up transaction...");
+    setLookupResult(null);
+
+    try {
+      const res = await api.post("/ingest/blockchain/lookup", { txHash: form.txHash.trim() });
+      
+      if (res.data.success && res.data.tx) {
+        const tx = res.data.tx;
+        
+        // Auto-populate the form with fetched data
+        setForm(prev => ({
+          ...prev,
+          tokenSymbol: tx.tokenSymbol?.toUpperCase() || prev.tokenSymbol,
+          quantity: Math.abs(tx.valueDecimal || 0),
+          priceUsd: res.data.priceUsd || tx.priceUsd || 0,
+          feeUsd: tx.feeUsd || tx.fee || 0,
+          timestamp: tx.blockTime || prev.timestamp,
+          // Infer type based on value direction
+          type: tx.valueDecimal >= 0 ? "transfer" : "fee"
+        }));
+
+        setLookupResult(res.data);
+        setStatus(`✅ Found ${res.data.chain?.toUpperCase()} transaction! Fields auto-populated.`);
+      } else {
+        setStatus(`❌ ${res.data.error || "Transaction not found"}`);
+      }
+    } catch (err: any) {
+      setStatus(`❌ Lookup failed: ${err?.response?.data?.error || err.message}`);
+    } finally {
+      setLookupLoading(false);
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -120,11 +163,57 @@ const CryptoPage = () => {
           {showForm && (
             <div className="form-card">
               <h3>Record Crypto Transaction</h3>
+              
+              {/* TX Hash Lookup - Primary Input */}
+              <div style={{ marginBottom: 20, padding: 16, background: "#f5f5f5", borderRadius: 8 }}>
+                <label style={{ fontWeight: "bold", display: "block", marginBottom: 8 }}>
+                  🔗 Transaction Hash (Auto-populate from blockchain)
+                </label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input 
+                    style={{ flex: 1, padding: "10px 12px", fontSize: 14 }}
+                    value={form.txHash} 
+                    onChange={(e) => setForm({ ...form, txHash: e.target.value })} 
+                    placeholder="Paste tx hash: 0x... (EVM), r... (XRP), or any chain"
+                    onKeyDown={(e) => e.key === "Enter" && lookupTxHash()}
+                  />
+                  <button 
+                    className="btn" 
+                    onClick={lookupTxHash}
+                    disabled={lookupLoading || !form.txHash.trim()}
+                    style={{ whiteSpace: "nowrap", padding: "10px 20px" }}
+                  >
+                    {lookupLoading ? "Looking up..." : "🔍 Lookup & Fill"}
+                  </button>
+                </div>
+                <p style={{ fontSize: 12, color: "#666", marginTop: 8, marginBottom: 0 }}>
+                  Supports: Ethereum, Polygon, BSC, Arbitrum, XRP Ledger, Solana, Bitcoin
+                </p>
+              </div>
+
+              {/* Lookup Result Display */}
+              {lookupResult?.success && (
+                <div style={{ background: "#e8f5e9", padding: 16, borderRadius: 8, marginBottom: 16, border: "1px solid #4CAF50" }}>
+                  <strong style={{ color: "#2e7d32" }}>✅ Transaction Found ({lookupResult.chain?.toUpperCase()})</strong>
+                  <div style={{ fontSize: 14, marginTop: 8, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    <div><strong>From:</strong> <code style={{ fontSize: 12 }}>{lookupResult.tx?.from?.slice(0, 16)}...</code></div>
+                    <div><strong>To:</strong> <code style={{ fontSize: 12 }}>{lookupResult.tx?.to?.slice(0, 16)}...</code></div>
+                    <div><strong>Value:</strong> {lookupResult.tx?.valueDecimal?.toFixed(6)} {lookupResult.tx?.tokenSymbol?.toUpperCase()}</div>
+                    <div><strong>USD Value:</strong> ${lookupResult.valueUsd?.toFixed(2) || "N/A"}</div>
+                  </div>
+                  <p style={{ fontSize: 12, color: "#2e7d32", marginTop: 8, marginBottom: 0 }}>
+                    ↓ Fields below have been auto-filled. Review and adjust if needed.
+                  </p>
+                </div>
+              )}
+
+              {/* Form Fields */}
               <div className="form-grid">
                 <div className="form-row">
                   <label>Type</label>
                   <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
                     <option value="transfer">Transfer In</option>
+                    <option value="transfer_out">Transfer Out</option>
                     <option value="reward">Staking Reward</option>
                     <option value="stake">Stake</option>
                     <option value="unstake">Unstake</option>
@@ -138,22 +227,24 @@ const CryptoPage = () => {
                 </div>
                 <div className="form-row">
                   <label>Quantity</label>
-                  <input type="number" step="0.0001" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: parseFloat(e.target.value) })} />
+                  <input type="number" step="0.000001" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: parseFloat(e.target.value) || 0 })} />
                 </div>
                 <div className="form-row">
                   <label>Price (USD)</label>
-                  <input type="number" step="0.01" value={form.priceUsd} onChange={(e) => setForm({ ...form, priceUsd: parseFloat(e.target.value) })} />
+                  <input type="number" step="0.01" value={form.priceUsd} onChange={(e) => setForm({ ...form, priceUsd: parseFloat(e.target.value) || 0 })} />
                 </div>
                 <div className="form-row">
                   <label>Fee (USD)</label>
-                  <input type="number" step="0.01" value={form.feeUsd} onChange={(e) => setForm({ ...form, feeUsd: parseFloat(e.target.value) })} />
+                  <input type="number" step="0.01" value={form.feeUsd} onChange={(e) => setForm({ ...form, feeUsd: parseFloat(e.target.value) || 0 })} />
                 </div>
                 <div className="form-row">
-                  <label>Tx Hash</label>
-                  <input value={form.txHash} onChange={(e) => setForm({ ...form, txHash: e.target.value })} placeholder="0x..." />
+                  <label>Description (optional)</label>
+                  <input placeholder="e.g., Payment for services" />
                 </div>
               </div>
-              <button className="btn" onClick={recordTxn}>Record</button>
+              <button className="btn" onClick={recordTxn} style={{ marginTop: 16 }}>
+                ✓ Record Transaction
+              </button>
             </div>
           )}
 
