@@ -19,7 +19,7 @@ This document captures the issues we faced during development and deployment, al
 ### Issue 1: Async/Sync Mismatch Between Stores
 
 **Severity:** Critical  
-**Status:** Partially Fixed (AuthService only)  
+**Status:** ✅ FULLY FIXED (All services)  
 **Affects:** All backend services using PgStore
 
 **Problem:**
@@ -50,25 +50,27 @@ if (user) {  // Always true - Promise is truthy!
 }
 ```
 
-**Affected Services:**
+**Affected Services (ALL NOW FIXED):**
 | Service | File | Status |
 |---------|------|--------|
 | AuthService | `core/auth.ts` | ✅ Fixed |
-| LedgerService | `core/ledger.ts` | ❌ Needs fix |
-| ReportingService | `core/reporting.ts` | ❌ Needs fix |
-| InvoiceService | `core/invoices.ts` | ❌ Needs fix |
-| ExpenseService | `core/expenses.ts` | ❌ Needs fix |
-| PayrollService | `core/payroll.ts` | ❌ Needs fix |
-| BankTxnService | `core/bankTxns.ts` | ❌ Needs fix |
-| CryptoService | `core/crypto.ts` | ❌ Needs fix |
-| ReconciliationService | `core/reconciliation.ts` | ❌ Needs fix |
-| CloseService | `core/close.ts` | ❌ Needs fix |
-| ControlsService | `core/controls.ts` | ❌ Needs fix |
-| RatioService | `core/calculations/ratios.ts` | ❌ Needs fix |
-| FormulaService | `core/calculations/formulas.ts` | ❌ Needs fix |
-| DepreciationService | `core/calculations/depreciation.ts` | ❌ Needs fix |
-| AuditLogService | `core/security/auditLog.ts` | ❌ Needs fix |
-| RbacService | `core/security/rbac.ts` | ❌ Needs fix |
+| LedgerService | `core/ledger.ts` | ✅ Fixed |
+| ReportingService | `core/reporting.ts` | ✅ Fixed |
+| InvoiceService | `core/invoices.ts` | ✅ Fixed |
+| ExpenseService | `core/expenses.ts` | ✅ Fixed |
+| PayrollService | `core/payroll.ts` | ✅ Fixed |
+| BankTxnService | `core/bankTxns.ts` | ✅ Fixed |
+| CryptoService | `core/crypto.ts` | ✅ Fixed |
+| ReconciliationService | `core/reconciliation.ts` | ✅ Fixed |
+| CloseService | `core/close.ts` | ✅ Fixed |
+| ControlsService | `core/controls.ts` | ✅ Fixed |
+| RatioService | `core/calculations/ratios.ts` | ✅ Fixed |
+| FormulaService | `core/calculations/formulas.ts` | ✅ Fixed |
+| DepreciationService | `core/calculations/depreciation.ts` | ✅ Fixed |
+| AuditLogService | `core/security/auditLog.ts` | ✅ Fixed |
+| RbacService | `core/security/rbac.ts` | ✅ Fixed |
+| OCRService | `core/ocr/service.ts` | ✅ Fixed |
+| All Ingestors | `core/ingestion/*.ts` | ✅ Fixed |
 
 **Solution Pattern:**
 Wrap all store method calls with `await Promise.resolve()`:
@@ -240,14 +242,63 @@ interface IStore {
 
 ---
 
+## User Testing Feedback (Dec 2024)
+
+### Feedback 1: Invoice OCR Not Working
+
+**Status:** ✅ Fixed
+
+**Problem:** Users could upload images but nothing happened after upload.
+
+**Root Causes:**
+1. PDF files were not supported (only images)
+2. `OPENAI_API_KEY` may not be configured in Render
+3. Error messages weren't being displayed clearly
+
+**Solution:**
+- Added PDF support using `pdf-parse` library
+- Backend extracts text from PDFs and sends to OpenAI
+- Frontend now accepts PDF files
+- Better error handling and status messages
+
+---
+
+### Feedback 2: Expense Review/Edit Missing
+
+**Status:** ✅ Fixed
+
+**Problem:** No visible way to review or approve/reject expenses after they're submitted.
+
+**Solution:**
+- Added prominent review panel showing all pending expenses
+- Each expense shows full details (vendor, amount, date, description)
+- Clear Approve ✓ and Reject ✗ buttons
+- Summary bar highlights pending count with warning indicator
+
+---
+
+### Feedback 3: Journal Entry Details Not Shown
+
+**Status:** ✅ Fixed
+
+**Problem:** Journal entries show "Review" button but no details about what you're reviewing.
+
+**Solution:**
+- Added expandable rows (click to expand)
+- Shows all line items with account names, debits, credits
+- Displays totals and validates debits = credits
+- Shows external reference (blockchain TX hash) and creation date
+
+---
+
 ## Recommendations
 
-### Immediate (Before Next Feature)
+### Immediate ✅ DONE
 
-1. **Complete async refactor** for all services
-2. **Create IStore interface** for type safety
-3. **Add startup validation** for environment variables
-4. **Add health check** that verifies database connectivity
+1. ~~Complete async refactor for all services~~ ✅
+2. ~~Create IStore interface for type safety~~ ✅
+3. Add startup validation for environment variables
+4. Add health check that verifies database connectivity
 
 ### Short-term (Next Sprint)
 

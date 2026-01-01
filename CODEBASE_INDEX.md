@@ -23,11 +23,30 @@ This is a **full-stack accounting and financial reporting application** designed
 - Crypto tracking (Transactions, Lots, Cost Basis)
 - Payroll management
 - Asset depreciation
-- OCR invoice scanning
-- Blockchain transaction lookup
+- OCR invoice scanning (images + **PDF support**)
+- Blockchain transaction lookup (EVM, XRPL, Solana, Bitcoin)
 - Frontend navigation (no crashes)
 - Database connection to Supabase
 - CORS configuration
+- Admin panel (system health, user management)
+- AI chatbot (requires OPENAI_API_KEY)
+
+### ✅ User Feedback Addressed (Dec 2024)
+
+| Issue | Fix Applied |
+|-------|-------------|
+| Invoice OCR not working after upload | Added PDF support, better error handling |
+| Expenses have no review UI | Added prominent review panel with approve/reject |
+| Journal review shows no details | Added expandable rows with full line details |
+
+### 📋 Environment Variables Required
+
+| Variable | Purpose | Required |
+|----------|---------|----------|
+| `DATABASE_URL` | Supabase PostgreSQL connection | Yes |
+| `JWT_SECRET` | Token signing | Yes |
+| `OPENAI_API_KEY` | OCR + AI Chat | For OCR/AI features |
+| `ALLOWED_ORIGINS` | CORS (frontend URL) | Yes |
 
 ### 📋 Ready for Testing
 - Deploy to Render and verify all endpoints
