@@ -2,16 +2,25 @@ import { useEffect, useState } from "react";
 import { api, safeArray } from "../lib/api";
 import { useAuthStore } from "../store/auth";
 
+type JournalLine = { 
+  accountId: string; 
+  debit: number; 
+  credit: number; 
+  description?: string;
+  currency?: string;
+};
+
 type Journal = {
   id: string;
   status: string;
   period: string;
   memo?: string;
-  lines: { accountId: string; debit: number; credit: number; description?: string }[];
+  lines: JournalLine[];
   createdBy: string;
   reviewedBy?: string;
   postedBy?: string;
   createdAt: string;
+  externalRef?: string;
 };
 
 type Account = { id: string; code: string; name: string; type: string };
@@ -26,8 +35,22 @@ const JournalsPage = () => {
   const [debitAcct, setDebitAcct] = useState("");
   const [creditAcct, setCreditAcct] = useState("");
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const { user } = useAuthStore();
   const roles = user?.roles ?? [];
+
+  // Helper to get account name by ID
+  const getAccountName = (accountId: string) => {
+    const account = accounts.find(a => a.id === accountId);
+    return account ? `${account.code} — ${account.name}` : accountId;
+  };
+
+  // Calculate total debits/credits for a journal
+  const getJournalTotals = (lines: JournalLine[]) => {
+    const debits = lines.reduce((sum, l) => sum + (l.debit || 0), 0);
+    const credits = lines.reduce((sum, l) => sum + (l.credit || 0), 0);
+    return { debits, credits };
+  };
 
   const fetchJournals = async () => {
     try {
@@ -149,39 +172,88 @@ const JournalsPage = () => {
 
       <div className="card">
         <h2>Journals</h2>
+        <p style={{ color: "#666", marginBottom: 16 }}>Click on a journal to view details</p>
         <table className="table">
           <thead>
             <tr>
-              <th>ID</th>
+              <th></th>
               <th>Status</th>
               <th>Period</th>
               <th>Memo</th>
+              <th>Total</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {journals.map((j) => (
-              <tr key={j.id}>
-                <td>{j.id}</td>
-                <td>
-                  <span className="badge">{j.status}</span>
-                </td>
-                <td>{j.period}</td>
-                <td>{j.memo}</td>
-                <td className="row" style={{ gap: 4 }}>
-                  {j.status === "draft" && (
-                    <button className="btn secondary" onClick={() => review(j.id)}>
-                      Review
-                    </button>
+            {journals.map((j) => {
+              const totals = getJournalTotals(j.lines || []);
+              const isExpanded = expandedId === j.id;
+              return (
+                <>
+                  <tr key={j.id} onClick={() => setExpandedId(isExpanded ? null : j.id)} style={{ cursor: "pointer" }}>
+                    <td style={{ width: 30 }}>{isExpanded ? "▼" : "▶"}</td>
+                    <td>
+                      <span className={`badge ${j.status}`}>{j.status}</span>
+                    </td>
+                    <td>{j.period}</td>
+                    <td>{j.memo || j.externalRef || "—"}</td>
+                    <td>${totals.debits.toFixed(2)}</td>
+                    <td className="row" style={{ gap: 4 }} onClick={(e) => e.stopPropagation()}>
+                      {j.status === "draft" && (
+                        <button className="btn secondary" onClick={() => review(j.id)}>
+                          ✓ Approve
+                        </button>
+                      )}
+                      {j.status === "reviewed" && (
+                        <button className="btn" onClick={() => post(j.id)}>
+                          📤 Post
+                        </button>
+                      )}
+                      {j.status === "posted" && <span style={{ color: "#4CAF50" }}>✓ Posted</span>}
+                    </td>
+                  </tr>
+                  {isExpanded && (
+                    <tr key={`${j.id}-details`}>
+                      <td colSpan={6} style={{ background: "#f9f9f9", padding: 16 }}>
+                        <div style={{ marginBottom: 12 }}>
+                          <strong>Journal Entry Details</strong>
+                          {j.externalRef && <span style={{ marginLeft: 12, color: "#666" }}>Ref: {j.externalRef}</span>}
+                          <span style={{ marginLeft: 12, color: "#666" }}>Created: {new Date(j.createdAt).toLocaleDateString()}</span>
+                        </div>
+                        <table className="table" style={{ marginBottom: 0 }}>
+                          <thead>
+                            <tr>
+                              <th>Account</th>
+                              <th>Description</th>
+                              <th style={{ textAlign: "right" }}>Debit</th>
+                              <th style={{ textAlign: "right" }}>Credit</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(j.lines || []).map((line, idx) => (
+                              <tr key={idx}>
+                                <td>{getAccountName(line.accountId)}</td>
+                                <td>{line.description || "—"}</td>
+                                <td style={{ textAlign: "right" }}>{line.debit > 0 ? `$${line.debit.toFixed(2)}` : ""}</td>
+                                <td style={{ textAlign: "right" }}>{line.credit > 0 ? `$${line.credit.toFixed(2)}` : ""}</td>
+                              </tr>
+                            ))}
+                            <tr style={{ fontWeight: "bold", borderTop: "2px solid #ccc" }}>
+                              <td colSpan={2}>Total</td>
+                              <td style={{ textAlign: "right" }}>${totals.debits.toFixed(2)}</td>
+                              <td style={{ textAlign: "right" }}>${totals.credits.toFixed(2)}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                        {totals.debits !== totals.credits && (
+                          <p style={{ color: "red", marginTop: 8 }}>⚠️ Debits and Credits do not balance!</p>
+                        )}
+                      </td>
+                    </tr>
                   )}
-                  {j.status === "reviewed" && (
-                    <button className="btn" onClick={() => post(j.id)}>
-                      Post
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
+                </>
+              );
+            })}
           </tbody>
         </table>
       </div>

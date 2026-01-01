@@ -181,9 +181,9 @@ const InvoicesPage = () => {
   };
 
   const handleFile = async (file: File) => {
-    const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+    const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp", "application/pdf"];
     if (!allowedTypes.includes(file.type)) {
-      setOcrStatus("Unsupported file type. Please upload JPG, PNG, or WebP images.");
+      setOcrStatus("Unsupported file type. Please upload JPG, PNG, WebP images, or PDF files.");
       return;
     }
 

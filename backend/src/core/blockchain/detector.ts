@@ -87,3 +87,5 @@ export function normalizeHash(hash: string, chain: Chain): string {
       return trimmed;
   }
 }
+
+

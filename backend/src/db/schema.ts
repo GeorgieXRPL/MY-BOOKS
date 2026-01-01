@@ -454,3 +454,5 @@ export const invitations = pgTable("invitations", {
   orgIdIdx: index("invitations_org_id_idx").on(table.orgId),
   emailIdx: index("invitations_email_idx").on(table.email)
 }));
+
+

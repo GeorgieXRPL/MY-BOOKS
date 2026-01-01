@@ -279,3 +279,5 @@ export class AutoIngestService {
     return journals.some((j: any) => j.externalRef === txHash);
   }
 }
+
+

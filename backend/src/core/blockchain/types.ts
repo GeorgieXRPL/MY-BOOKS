@@ -83,3 +83,5 @@ export interface FetcherResult {
   tx?: BlockchainTx;
   error?: string;
 }
+
+

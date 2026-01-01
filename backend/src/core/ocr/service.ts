@@ -5,7 +5,8 @@
 
 import { uploadFile, readLocalFile, isStorageConfigured } from "./upload";
 import { 
-  extractInvoiceFromImage, 
+  extractInvoiceFromImage,
+  extractInvoiceFromPDF,
   isOCRConfigured, 
   isSupportedMimeType,
   SUPPORTED_MIME_TYPES 
@@ -78,11 +79,17 @@ export class OCRService {
       return { success: false, error: "Failed to upload file" };
     }
 
-    logger.info("File uploaded for OCR", { fileId: uploadedFile.id, filename });
+    logger.info("File uploaded for OCR", { fileId: uploadedFile.id, filename, mimeType });
 
-    // Step 2: Extract invoice data
-    const ocrResult = await extractInvoiceFromImage(fileBuffer, mimeType);
-    if (!ocrResult.success || !ocrResult.invoice) {
+    // Step 2: Extract invoice data (handle PDF vs image)
+    let ocrResult;
+    if (mimeType === "application/pdf") {
+      ocrResult = await extractInvoiceFromPDF(fileBuffer);
+    } else {
+      ocrResult = await extractInvoiceFromImage(fileBuffer, mimeType);
+    }
+    
+    if (!ocrResult.success) {
       return {
         success: false,
         error: ocrResult.error || "Failed to extract invoice data",
@@ -91,6 +98,13 @@ export class OCRService {
     }
 
     const extracted = ocrResult.invoice;
+    if (!extracted) {
+      return {
+        success: false,
+        error: "No invoice data extracted",
+        fileUrl: uploadedFile.url
+      };
+    }
     logger.info("Invoice data extracted", {
       vendor: extracted.vendorName,
       total: extracted.total,
@@ -202,3 +216,5 @@ export class OCRService {
     return date.toISOString().split("T")[0];
   }
 }
+
+

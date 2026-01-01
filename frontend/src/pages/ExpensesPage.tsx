@@ -11,6 +11,12 @@ interface Expense {
   date: string;
   status: string;
   reimbursable: boolean;
+  paidBy?: string;
+  accountId?: string;
+  taxAmount?: number;
+  createdAt?: string;
+  submittedAt?: string;
+  approvedBy?: string;
 }
 
 const CATEGORIES = ["Travel", "Office Supplies", "Software", "Utilities", "Marketing", "Professional Services", "Other"];
@@ -20,6 +26,7 @@ const ExpensesPage = () => {
   const [accounts, setAccounts] = useState<any[]>([]);
   const [filter, setFilter] = useState<string>("all");
   const [showForm, setShowForm] = useState(false);
+  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [form, setForm] = useState({
     category: "Other",
     vendor: "",
@@ -33,6 +40,9 @@ const ExpensesPage = () => {
     taxAmount: 0
   });
   const [status, setStatus] = useState("");
+
+  // Get pending approval count
+  const pendingCount = expenses.filter(e => e.status === "submitted").length;
 
   useEffect(() => {
     loadExpenses();
@@ -114,9 +124,17 @@ const ExpensesPage = () => {
           <span className="label">Count</span>
           <span className="value">{expenses.length}</span>
         </div>
-        <div className="summary-item">
+        <div className="summary-item" style={{ background: pendingCount > 0 ? "#fff8e1" : undefined }}>
           <span className="label">Pending Approval</span>
-          <span className="value">{expenses.filter((e) => e.status === "submitted").length}</span>
+          <span className="value" style={{ color: pendingCount > 0 ? "#f57c00" : undefined }}>
+            {pendingCount} {pendingCount > 0 && "⚠️"}
+          </span>
+        </div>
+        <div className="summary-item">
+          <span className="label">Approved</span>
+          <span className="value" style={{ color: "#4CAF50" }}>
+            {expenses.filter((e) => e.status === "approved").length}
+          </span>
         </div>
       </div>
 
@@ -187,6 +205,58 @@ const ExpensesPage = () => {
       )}
 
       {status && <p className="status">{status}</p>}
+
+      {/* Review Panel - Shows when there are pending expenses */}
+      {pendingCount > 0 && (
+        <div className="form-card" style={{ background: "#fff8e1", borderLeft: "4px solid #ffc107" }}>
+          <h3>⚠️ {pendingCount} Expense{pendingCount > 1 ? "s" : ""} Pending Approval</h3>
+          <p style={{ color: "#666", marginBottom: 16 }}>
+            The following expenses have been submitted and require your review before being recorded.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {expenses.filter(e => e.status === "submitted").map(exp => (
+              <div key={exp.id} style={{ 
+                background: "white", 
+                padding: 16, 
+                borderRadius: 8, 
+                border: "1px solid #e0e0e0",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center"
+              }}>
+                <div>
+                  <strong>{exp.vendor}</strong> — {exp.category}
+                  <div style={{ color: "#666", fontSize: 14 }}>
+                    {exp.description}
+                  </div>
+                  <div style={{ marginTop: 4, fontSize: 14 }}>
+                    <span style={{ fontWeight: "bold" }}>${exp.amount.toFixed(2)} {exp.currency}</span>
+                    <span style={{ marginLeft: 12, color: "#666" }}>{exp.date}</span>
+                    {exp.paidBy && <span style={{ marginLeft: 12, color: "#666" }}>Paid by: {exp.paidBy}</span>}
+                    {exp.reimbursable && <span className="badge" style={{ marginLeft: 8, background: "#e3f2fd" }}>Reimbursable</span>}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button 
+                    className="btn" 
+                    style={{ background: "#4CAF50" }}
+                    onClick={() => approveExpense(exp.id)}
+                  >
+                    ✓ Approve
+                  </button>
+                  <button 
+                    className="btn secondary" 
+                    style={{ background: "#f44336", color: "white" }}
+                    onClick={() => rejectExpense(exp.id)}
+                  >
+                    ✗ Reject
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <table className="data-table">
         <thead>

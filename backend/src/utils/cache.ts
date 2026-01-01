@@ -196,3 +196,5 @@ export async function closeCache(): Promise<void> {
 export function isRedisConfigured(): boolean {
   return !!REDIS_URL;
 }
+
+

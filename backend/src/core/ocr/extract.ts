@@ -197,14 +197,102 @@ function normalizeDate(dateStr?: string): string | undefined {
  * Note: For full PDF support, you'd need pdf-poppler or similar
  * For now, we support image formats directly
  */
+/**
+ * Extract invoice data from a PDF using text extraction + OpenAI
+ */
 export async function extractInvoiceFromPDF(pdfBuffer: Buffer): Promise<OCRResult> {
-  // For PDFs, we'd need to convert to image first
-  // Using pdf-poppler or similar library
-  // For now, return an error suggesting image upload
-  return {
-    success: false,
-    error: "PDF processing not yet implemented. Please upload an image (JPG, PNG) instead."
-  };
+  const openai = getOpenAI();
+  
+  if (!openai) {
+    return { success: false, error: "OpenAI API not configured (OPENAI_API_KEY missing)" };
+  }
+
+  try {
+    // Use pdf-parse to extract text from PDF
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const pdfParse = require("pdf-parse");
+    const pdfData = await pdfParse(pdfBuffer);
+    const text = pdfData.text;
+
+    if (!text || text.trim().length < 20) {
+      return {
+        success: false,
+        error: "Could not extract text from PDF. The PDF may be image-based - please upload as an image instead."
+      };
+    }
+
+    logger.info("Extracted PDF text", { charCount: text.length });
+
+    // Use OpenAI to parse the extracted text
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "system",
+          content: `You are an expert at extracting structured data from invoice text.
+Extract all relevant information and return it as JSON.
+Be precise with numbers and currencies. If a field is not visible or unclear, omit it rather than guess.`
+        },
+        {
+          role: "user",
+          content: `Extract invoice data from this text. Return ONLY valid JSON in this exact format:
+{
+  "vendorName": "Company Name",
+  "vendorAddress": "Full address if visible",
+  "vendorTaxId": "Tax ID if visible",
+  "invoiceNumber": "INV-12345",
+  "invoiceDate": "YYYY-MM-DD",
+  "dueDate": "YYYY-MM-DD",
+  "subtotal": 100.00,
+  "taxAmount": 10.00,
+  "total": 110.00,
+  "currency": "USD",
+  "lineItems": [
+    {
+      "description": "Item description",
+      "quantity": 1,
+      "unitPrice": 100.00,
+      "amount": 100.00,
+      "taxRate": 10
+    }
+  ],
+  "paymentTerms": "Net 30",
+  "notes": "Any additional notes",
+  "confidence": 0.95
+}
+
+Text from PDF:
+${text.substring(0, 8000)}`
+        }
+      ],
+      max_tokens: 2000,
+      temperature: 0.1
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      return { success: false, error: "No response from AI" };
+    }
+
+    // Parse JSON from response
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return { success: false, error: "Could not parse AI response" };
+    }
+
+    const extracted: ExtractedInvoice = JSON.parse(jsonMatch[0]);
+    
+    // Validate required fields
+    if (!extracted.vendorName || !extracted.total) {
+      return { success: false, error: "Could not extract required fields (vendor name, total)" };
+    }
+
+    return { success: true, invoice: extracted };
+
+  } catch (e: any) {
+    logger.error("PDF extraction failed", { error: e.message });
+    return { success: false, error: `PDF extraction failed: ${e.message}` };
+  }
 }
 
 /**
@@ -215,9 +303,12 @@ export const SUPPORTED_MIME_TYPES = [
   "image/jpg",
   "image/png",
   "image/webp",
-  "image/gif"
+  "image/gif",
+  "application/pdf"
 ];
 
 export function isSupportedMimeType(mimeType: string): boolean {
   return SUPPORTED_MIME_TYPES.includes(mimeType.toLowerCase());
 }
+
+
