@@ -78,7 +78,14 @@ const CryptoPage = () => {
         }));
 
         setLookupResult(res.data);
-        setStatus(`✅ Found ${res.data.chain?.toUpperCase()} transaction! Fields auto-populated.`);
+        
+        // Build status message
+        const networkName = tx.networkName || res.data.chain?.toUpperCase();
+        let statusMsg = `✅ Found ${networkName} transaction! Fields auto-populated.`;
+        if (!res.data.priceUsd || res.data.priceUsd === 0) {
+          statusMsg += " ⚠️ Please enter the current price manually.";
+        }
+        setStatus(statusMsg);
       } else {
         setStatus(`❌ ${res.data.error || "Transaction not found"}`);
       }
@@ -218,8 +225,20 @@ const CryptoPage = () => {
                       )}
                     </div>
                     <div><strong>Value:</strong> {lookupResult.tx?.valueDecimal?.toFixed(6)}</div>
-                    <div><strong>USD Value:</strong> ${lookupResult.valueUsd?.toFixed(2) || "N/A"}</div>
-                    <div><strong>Fee:</strong> {lookupResult.tx?.fee?.toFixed(6) || "0"}</div>
+                    <div>
+                      <strong>USD Value:</strong> {
+                        lookupResult.priceUsd && lookupResult.priceUsd > 0 
+                          ? `$${lookupResult.valueUsd?.toFixed(2)}` 
+                          : <span style={{ color: "#f57c00" }}>⚠️ Enter price below</span>
+                      }
+                    </div>
+                    <div>
+                      <strong>Price/Token:</strong> {
+                        lookupResult.priceUsd && lookupResult.priceUsd > 0 
+                          ? `$${lookupResult.priceUsd.toFixed(2)}` 
+                          : <span style={{ color: "#f57c00" }}>Pending</span>
+                      }
+                    </div>
                   </div>
                   {/* Show token address for non-native tokens */}
                   {lookupResult.tx?.tokenAddress && (
@@ -233,7 +252,12 @@ const CryptoPage = () => {
                       <strong>Issuer:</strong> <code>{lookupResult.tx.tokenIssuer.slice(0, 20)}...</code>
                     </div>
                   )}
-                  <p style={{ fontSize: 12, color: "#2e7d32", marginTop: 12, marginBottom: 0 }}>
+                  {(!lookupResult.priceUsd || lookupResult.priceUsd === 0) && (
+                    <div style={{ marginTop: 12, padding: 8, background: "#fff8e1", borderRadius: 4, fontSize: 12 }}>
+                      ⚠️ <strong>Price not available.</strong> Please enter the {lookupResult.tx?.tokenSymbol} price at the time of transaction.
+                    </div>
+                  )}
+                  <p style={{ fontSize: 12, color: "#2e7d32", marginTop: 8, marginBottom: 0 }}>
                     ↓ Fields below have been auto-filled. Review and adjust if needed.
                   </p>
                 </div>
