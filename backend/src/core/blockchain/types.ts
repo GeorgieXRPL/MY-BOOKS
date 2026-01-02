@@ -20,8 +20,13 @@ export interface BlockchainTx {
 
   // Token info (for token transfers)
   tokenSymbol: string;
-  tokenAddress?: string;
+  tokenAddress?: string; // Contract address for ERC-20, SPL mint, etc.
   tokenDecimals?: number;
+  tokenIssuer?: string; // For XRPL issued currencies
+  tokenName?: string; // Full token name if available
+
+  // Network info (for EVM chains)
+  networkName?: string; // e.g., "Ethereum", "BNB Smart Chain", "Polygon"
 
   // Pricing
   priceUsd?: number;

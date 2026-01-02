@@ -98,17 +98,29 @@ function parseSolanaTransaction(signature: string, tx: any): FetcherResult {
   const signerAccount = accountKeys.find((k: any) => k.signer)?.pubkey || accountKeys[0]?.pubkey || "";
 
   // Calculate value
-  let valueSOL = 0;
+  let valueDecimal = 0;
   let tokenSymbol = chainConfig.nativeSymbol;
+  let tokenAddress: string | undefined;
+  let tokenDecimals: number | undefined;
   
   if (primaryTransfer) {
     if (primaryTransfer.mint) {
       // SPL token transfer
-      tokenSymbol = "SPL"; // Would need token metadata API for symbol
-      valueSOL = primaryTransfer.amount;
+      tokenAddress = primaryTransfer.mint;
+      tokenDecimals = 9; // Default, may be overridden by token metadata
+      valueDecimal = primaryTransfer.amount;
+      
+      // Try to get token symbol from well-known tokens
+      tokenSymbol = getKnownSPLTokenSymbol(primaryTransfer.mint) || "SPL";
+      
+      logger.info("SPL token transfer detected", { 
+        mint: primaryTransfer.mint, 
+        symbol: tokenSymbol,
+        amount: valueDecimal 
+      });
     } else {
       // Native SOL transfer
-      valueSOL = primaryTransfer.amount / 1e9;
+      valueDecimal = primaryTransfer.amount / 1e9;
     }
   } else {
     // Try to get from pre/post balances
@@ -116,7 +128,7 @@ function parseSolanaTransaction(signature: string, tx: any): FetcherResult {
     const postBalances = tx.meta?.postBalances || [];
     if (preBalances.length > 0 && postBalances.length > 0) {
       const change = Math.abs(preBalances[0] - postBalances[0]);
-      valueSOL = (change - feeLamports) / 1e9;
+      valueDecimal = (change - feeLamports) / 1e9;
     }
   }
 
@@ -127,16 +139,48 @@ function parseSolanaTransaction(signature: string, tx: any): FetcherResult {
     blockTime,
     from: primaryTransfer?.source || signerAccount,
     to: primaryTransfer?.destination || "",
-    value: (valueSOL * 1e9).toString(),
-    valueDecimal: valueSOL,
+    value: primaryTransfer?.mint ? valueDecimal.toString() : (valueDecimal * 1e9).toString(),
+    valueDecimal,
     tokenSymbol,
-    tokenAddress: primaryTransfer?.mint,
+    tokenAddress,
+    tokenDecimals,
+    networkName: "Solana",
     fee: feeSOL,
     status,
     rawData: tx
   };
 
   return { success: true, tx: blockchainTx };
+}
+
+/**
+ * Get symbol for well-known SPL tokens
+ */
+function getKnownSPLTokenSymbol(mint: string): string | null {
+  const KNOWN_TOKENS: Record<string, string> = {
+    // USDC
+    "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": "USDC",
+    // USDT
+    "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB": "USDT",
+    // SOL (wrapped)
+    "So11111111111111111111111111111111111111112": "SOL",
+    // BONK
+    "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263": "BONK",
+    // JUP
+    "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN": "JUP",
+    // RAY
+    "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R": "RAY",
+    // ORCA
+    "orcaEKTdK7LKz57vaAYr9QeNsVEPfiu6QeMU1kektZE": "ORCA",
+    // mSOL
+    "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So": "mSOL",
+    // stSOL
+    "7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj": "stSOL",
+    // PYTH
+    "HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3": "PYTH"
+  };
+  
+  return KNOWN_TOKENS[mint] || null;
 }
 
 /**
@@ -214,16 +258,49 @@ export async function fetchEnhancedTransaction(signature: string): Promise<Fetch
     // Parse Helius enhanced format
     const chainConfig = CHAIN_CONFIGS.solana;
     
+    // Check for token transfers first (Helius provides parsed token info)
+    let tokenSymbol = chainConfig.nativeSymbol;
+    let tokenAddress: string | undefined;
+    let valueDecimal = 0;
+    let from = tx.feePayer || "";
+    let to = "";
+    
+    // Check for SPL token transfers
+    if (tx.tokenTransfers && tx.tokenTransfers.length > 0) {
+      const tokenTx = tx.tokenTransfers[0];
+      tokenSymbol = tokenTx.tokenStandard === "Fungible" 
+        ? (getKnownSPLTokenSymbol(tokenTx.mint) || "SPL")
+        : tokenTx.tokenStandard || "SPL";
+      tokenAddress = tokenTx.mint;
+      valueDecimal = tokenTx.tokenAmount || 0;
+      from = tokenTx.fromUserAccount || from;
+      to = tokenTx.toUserAccount || "";
+      
+      logger.info("Helius SPL token transfer", { 
+        mint: tokenAddress, 
+        symbol: tokenSymbol, 
+        amount: valueDecimal 
+      });
+    } else if (tx.nativeTransfers && tx.nativeTransfers.length > 0) {
+      // Native SOL transfer
+      const nativeTx = tx.nativeTransfers[0];
+      valueDecimal = (nativeTx.amount || 0) / 1e9;
+      from = nativeTx.fromUserAccount || from;
+      to = nativeTx.toUserAccount || "";
+    }
+    
     const blockchainTx: BlockchainTx = {
       chain: "solana",
       txHash: signature,
       blockNumber: tx.slot,
       blockTime: tx.timestamp ? new Date(tx.timestamp * 1000).toISOString() : undefined,
-      from: tx.feePayer || "",
-      to: tx.nativeTransfers?.[0]?.toUserAccount || "",
-      value: (tx.nativeTransfers?.[0]?.amount || 0).toString(),
-      valueDecimal: (tx.nativeTransfers?.[0]?.amount || 0) / 1e9,
-      tokenSymbol: chainConfig.nativeSymbol,
+      from,
+      to,
+      value: valueDecimal.toString(),
+      valueDecimal,
+      tokenSymbol,
+      tokenAddress,
+      networkName: "Solana",
       fee: (tx.fee || 0) / 1e9,
       status: tx.transactionError ? "failed" : "success",
       rawData: tx

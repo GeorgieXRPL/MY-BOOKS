@@ -15,27 +15,67 @@ const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY;
 const NETWORKS = {
   ethereum: {
     alchemyUrl: ALCHEMY_API_KEY ? `https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}` : null,
-    publicRpcUrl: "https://eth.llamarpc.com", // Free public RPC
+    publicRpcUrl: "https://eth.llamarpc.com",
     etherscanUrl: "https://api.etherscan.io/api",
-    chainId: 1
+    chainId: 1,
+    nativeSymbol: "ETH",
+    name: "Ethereum"
+  },
+  bsc: {
+    alchemyUrl: null, // Alchemy doesn't support BSC
+    publicRpcUrl: "https://bsc.publicnode.com",
+    etherscanUrl: "https://api.bscscan.com/api",
+    chainId: 56,
+    nativeSymbol: "BNB",
+    name: "BNB Smart Chain"
   },
   polygon: {
     alchemyUrl: ALCHEMY_API_KEY ? `https://polygon-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}` : null,
     publicRpcUrl: "https://polygon.llamarpc.com",
     etherscanUrl: "https://api.polygonscan.com/api",
-    chainId: 137
+    chainId: 137,
+    nativeSymbol: "MATIC",
+    name: "Polygon"
   },
   arbitrum: {
     alchemyUrl: ALCHEMY_API_KEY ? `https://arb-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}` : null,
     publicRpcUrl: "https://arbitrum.llamarpc.com",
     etherscanUrl: "https://api.arbiscan.io/api",
-    chainId: 42161
+    chainId: 42161,
+    nativeSymbol: "ETH",
+    name: "Arbitrum"
   },
   base: {
     alchemyUrl: ALCHEMY_API_KEY ? `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}` : null,
     publicRpcUrl: "https://base.llamarpc.com",
     etherscanUrl: "https://api.basescan.org/api",
-    chainId: 8453
+    chainId: 8453,
+    nativeSymbol: "ETH",
+    name: "Base"
+  },
+  optimism: {
+    alchemyUrl: ALCHEMY_API_KEY ? `https://opt-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}` : null,
+    publicRpcUrl: "https://optimism.llamarpc.com",
+    etherscanUrl: "https://api-optimistic.etherscan.io/api",
+    chainId: 10,
+    nativeSymbol: "ETH",
+    name: "Optimism"
+  },
+  avalanche: {
+    alchemyUrl: null,
+    publicRpcUrl: "https://api.avax.network/ext/bc/C/rpc",
+    etherscanUrl: "https://api.snowtrace.io/api",
+    chainId: 43114,
+    nativeSymbol: "AVAX",
+    name: "Avalanche"
+  },
+  fantom: {
+    alchemyUrl: null,
+    publicRpcUrl: "https://rpc.ftm.tools",
+    etherscanUrl: "https://api.ftmscan.com/api",
+    chainId: 250,
+    nativeSymbol: "FTM",
+    name: "Fantom"
   }
 };
 
@@ -130,7 +170,33 @@ async function fetchFromRPC(txHash: string, network: NetworkKey): Promise<Fetche
       ? (receipt.status === "0x1" ? "success" : "failed")
       : "pending";
 
-    const chainConfig = CHAIN_CONFIGS.evm;
+    // Use network-specific native symbol
+    const nativeSymbol = config.nativeSymbol || "ETH";
+
+    // Check for ERC-20 token transfer
+    let tokenSymbol = nativeSymbol;
+    let tokenAddress: string | undefined;
+    let tokenDecimals: number | undefined;
+    let finalValue = valueEth;
+
+    if (receipt?.logs && receipt.logs.length > 0) {
+      const erc20Transfer = parseERC20Transfer(receipt.logs);
+      if (erc20Transfer) {
+        // Try to get token info
+        try {
+          const tokenInfo = await getTokenInfo(erc20Transfer.tokenAddress, rpcUrl);
+          if (tokenInfo) {
+            tokenSymbol = tokenInfo.symbol;
+            tokenAddress = erc20Transfer.tokenAddress;
+            tokenDecimals = tokenInfo.decimals;
+            finalValue = Number(erc20Transfer.value) / Math.pow(10, tokenInfo.decimals);
+            logger.info(`Detected ERC-20 transfer: ${tokenSymbol}`, { tokenAddress });
+          }
+        } catch (err) {
+          logger.warn("Failed to get token info, using native token", { error: (err as Error).message });
+        }
+      }
+    }
 
     const blockchainTx: BlockchainTx = {
       chain: "evm",
@@ -140,8 +206,11 @@ async function fetchFromRPC(txHash: string, network: NetworkKey): Promise<Fetche
       from: tx.from,
       to: tx.to || "", // Contract creation has no 'to'
       value: tx.value,
-      valueDecimal: valueEth,
-      tokenSymbol: chainConfig.nativeSymbol,
+      valueDecimal: finalValue,
+      tokenSymbol,
+      tokenAddress,
+      tokenDecimals,
+      networkName: config.name,
       fee: feeEth,
       status,
       rawData: { tx, receipt, network }
@@ -155,6 +224,71 @@ async function fetchFromRPC(txHash: string, network: NetworkKey): Promise<Fetche
 }
 
 /**
+ * Fetch ERC-20 token info (symbol, decimals) from contract
+ */
+async function getTokenInfo(tokenAddress: string, rpcUrl: string): Promise<{ symbol: string; decimals: number } | null> {
+  try {
+    // ERC-20 symbol() selector: 0x95d89b41
+    const symbolResponse = await axios.post(rpcUrl, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "eth_call",
+      params: [{
+        to: tokenAddress,
+        data: "0x95d89b41" // symbol()
+      }, "latest"]
+    }, { timeout: 5000 });
+
+    // ERC-20 decimals() selector: 0x313ce567
+    const decimalsResponse = await axios.post(rpcUrl, {
+      jsonrpc: "2.0",
+      id: 2,
+      method: "eth_call",
+      params: [{
+        to: tokenAddress,
+        data: "0x313ce567" // decimals()
+      }, "latest"]
+    }, { timeout: 5000 });
+
+    const symbolHex = symbolResponse.data.result;
+    const decimalsHex = decimalsResponse.data.result;
+
+    if (!symbolHex || symbolHex === "0x" || !decimalsHex || decimalsHex === "0x") {
+      return null;
+    }
+
+    // Decode symbol (string) - skip first 64 chars (offset) + next 64 chars (length)
+    let symbol = "";
+    try {
+      // Handle both padded string and raw bytes
+      const data = symbolHex.slice(2); // Remove 0x
+      if (data.length >= 128) {
+        // Standard ABI encoded string
+        const length = parseInt(data.slice(64, 128), 16);
+        const hexStr = data.slice(128, 128 + length * 2);
+        symbol = Buffer.from(hexStr, "hex").toString("utf8").replace(/\0/g, "");
+      } else {
+        // Might be bytes32 encoded (like MKR)
+        symbol = Buffer.from(data, "hex").toString("utf8").replace(/\0/g, "");
+      }
+    } catch {
+      return null;
+    }
+
+    const decimals = parseInt(decimalsHex, 16);
+
+    if (!symbol || isNaN(decimals)) {
+      return null;
+    }
+
+    return { symbol, decimals };
+  } catch (error) {
+    logger.warn("Failed to fetch token info", { tokenAddress, error: (error as Error).message });
+    return null;
+  }
+}
+
+/**
  * Try to fetch from multiple networks
  */
 export async function fetchEVMTransaction(txHash: string, preferredNetwork?: NetworkKey): Promise<FetcherResult> {
@@ -164,8 +298,17 @@ export async function fetchEVMTransaction(txHash: string, preferredNetwork?: Net
     if (result.success) return result;
   }
 
-  // Otherwise, try networks in order of popularity
-  const networks: NetworkKey[] = ["ethereum", "polygon", "arbitrum", "base"];
+  // Try networks in order of popularity
+  const networks: NetworkKey[] = [
+    "ethereum", 
+    "bsc",      // BNB Smart Chain
+    "polygon", 
+    "arbitrum", 
+    "base",
+    "optimism",
+    "avalanche",
+    "fantom"
+  ];
   
   for (const network of networks) {
     if (network === preferredNetwork) continue; // Already tried

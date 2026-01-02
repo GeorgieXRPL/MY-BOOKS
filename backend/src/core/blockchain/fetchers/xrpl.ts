@@ -66,22 +66,58 @@ export async function fetchXRPLTransaction(txHash: string): Promise<FetcherResul
 }
 
 /**
+ * Decode hex-encoded XRPL currency code (40-char hex) to readable string
+ */
+function decodeXRPLCurrency(currency: string): string {
+  if (currency.length === 3) {
+    // Standard 3-letter currency code
+    return currency;
+  }
+  
+  if (currency.length === 40) {
+    // Hex-encoded currency (40 chars = 20 bytes)
+    try {
+      // Remove trailing zeros and decode
+      const hex = currency.replace(/0+$/, "");
+      if (hex.length === 0) return currency;
+      
+      const decoded = Buffer.from(hex, "hex").toString("utf8").replace(/\0/g, "");
+      return decoded || currency;
+    } catch {
+      return currency;
+    }
+  }
+  
+  return currency;
+}
+
+/**
  * Parse XRPL transaction response
  */
 function parseXRPLTransaction(tx: XRPLPayment): FetcherResult {
   const chainConfig = CHAIN_CONFIGS.xrpl;
 
   // Parse amount
-  let valueXRP = 0;
+  let valueDecimal = 0;
   let tokenSymbol = chainConfig.nativeSymbol;
+  let tokenIssuer: string | undefined;
+  let tokenAddress: string | undefined; // Use issuer as "address" for XRPL
   
   if (typeof tx.Amount === "string") {
     // Native XRP (in drops, 1 XRP = 1,000,000 drops)
-    valueXRP = parseInt(tx.Amount) / 1_000_000;
+    valueDecimal = parseInt(tx.Amount) / 1_000_000;
   } else if (tx.Amount && typeof tx.Amount === "object") {
-    // Issued currency
-    valueXRP = parseFloat(tx.Amount.value);
-    tokenSymbol = tx.Amount.currency;
+    // Issued currency / token
+    valueDecimal = parseFloat(tx.Amount.value);
+    tokenSymbol = decodeXRPLCurrency(tx.Amount.currency);
+    tokenIssuer = tx.Amount.issuer;
+    tokenAddress = tx.Amount.issuer; // For consistency with EVM tokens
+    
+    logger.info("XRPL token transfer detected", { 
+      currency: tx.Amount.currency, 
+      decoded: tokenSymbol, 
+      issuer: tokenIssuer 
+    });
   }
 
   // Parse fee (always in drops)
@@ -107,6 +143,12 @@ function parseXRPLTransaction(tx: XRPLPayment): FetcherResult {
     }
   }
 
+  // Add destination tag to memo if present
+  if (tx.DestinationTag !== undefined) {
+    const dtMemo = `Destination Tag: ${tx.DestinationTag}`;
+    memo = memo ? `${memo} | ${dtMemo}` : dtMemo;
+  }
+
   const blockchainTx: BlockchainTx = {
     chain: "xrpl",
     txHash: tx.hash,
@@ -115,8 +157,11 @@ function parseXRPLTransaction(tx: XRPLPayment): FetcherResult {
     from: tx.Account,
     to: tx.Destination || "",
     value: typeof tx.Amount === "string" ? tx.Amount : tx.Amount?.value || "0",
-    valueDecimal: valueXRP,
+    valueDecimal,
     tokenSymbol,
+    tokenAddress,
+    tokenIssuer,
+    networkName: "XRP Ledger",
     fee: feeXRP,
     status,
     memo,

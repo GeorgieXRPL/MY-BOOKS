@@ -187,21 +187,53 @@ const CryptoPage = () => {
                   </button>
                 </div>
                 <p style={{ fontSize: 12, color: "#666", marginTop: 8, marginBottom: 0 }}>
-                  Supports: Ethereum, Polygon, BSC, Arbitrum, XRP Ledger, Solana, Bitcoin
+                  Supports: Ethereum, BSC/BNB, Polygon, Arbitrum, Base, Optimism, Avalanche, Fantom, XRP Ledger, Solana, Bitcoin
                 </p>
               </div>
 
               {/* Lookup Result Display */}
               {lookupResult?.success && (
                 <div style={{ background: "#e8f5e9", padding: 16, borderRadius: 8, marginBottom: 16, border: "1px solid #4CAF50" }}>
-                  <strong style={{ color: "#2e7d32" }}>✅ Transaction Found ({lookupResult.chain?.toUpperCase()})</strong>
-                  <div style={{ fontSize: 14, marginTop: 8, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                    <div><strong>From:</strong> <code style={{ fontSize: 12 }}>{lookupResult.tx?.from?.slice(0, 16)}...</code></div>
-                    <div><strong>To:</strong> <code style={{ fontSize: 12 }}>{lookupResult.tx?.to?.slice(0, 16)}...</code></div>
-                    <div><strong>Value:</strong> {lookupResult.tx?.valueDecimal?.toFixed(6)} {lookupResult.tx?.tokenSymbol?.toUpperCase()}</div>
-                    <div><strong>USD Value:</strong> ${lookupResult.valueUsd?.toFixed(2) || "N/A"}</div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <strong style={{ color: "#2e7d32" }}>
+                      ✅ Transaction Found
+                    </strong>
+                    <span style={{ 
+                      background: "#2e7d32", 
+                      color: "white", 
+                      padding: "2px 8px", 
+                      borderRadius: 4, 
+                      fontSize: 12 
+                    }}>
+                      {lookupResult.tx?.networkName || lookupResult.chain?.toUpperCase()}
+                    </span>
                   </div>
-                  <p style={{ fontSize: 12, color: "#2e7d32", marginTop: 8, marginBottom: 0 }}>
+                  <div style={{ fontSize: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    <div><strong>From:</strong> <code style={{ fontSize: 11 }}>{lookupResult.tx?.from?.slice(0, 16)}...</code></div>
+                    <div><strong>To:</strong> <code style={{ fontSize: 11 }}>{lookupResult.tx?.to?.slice(0, 16)}...</code></div>
+                    <div>
+                      <strong>Token:</strong> {lookupResult.tx?.tokenSymbol?.toUpperCase()}
+                      {lookupResult.tx?.tokenAddress && (
+                        <span style={{ color: "#666", fontSize: 11 }}> (Token)</span>
+                      )}
+                    </div>
+                    <div><strong>Value:</strong> {lookupResult.tx?.valueDecimal?.toFixed(6)}</div>
+                    <div><strong>USD Value:</strong> ${lookupResult.valueUsd?.toFixed(2) || "N/A"}</div>
+                    <div><strong>Fee:</strong> {lookupResult.tx?.fee?.toFixed(6) || "0"}</div>
+                  </div>
+                  {/* Show token address for non-native tokens */}
+                  {lookupResult.tx?.tokenAddress && (
+                    <div style={{ marginTop: 8, fontSize: 12, color: "#666" }}>
+                      <strong>Token Contract:</strong> <code>{lookupResult.tx.tokenAddress.slice(0, 20)}...</code>
+                    </div>
+                  )}
+                  {/* Show issuer for XRPL tokens */}
+                  {lookupResult.tx?.tokenIssuer && (
+                    <div style={{ marginTop: 4, fontSize: 12, color: "#666" }}>
+                      <strong>Issuer:</strong> <code>{lookupResult.tx.tokenIssuer.slice(0, 20)}...</code>
+                    </div>
+                  )}
+                  <p style={{ fontSize: 12, color: "#2e7d32", marginTop: 12, marginBottom: 0 }}>
                     ↓ Fields below have been auto-filled. Review and adjust if needed.
                   </p>
                 </div>
