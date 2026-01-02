@@ -221,23 +221,30 @@ const CryptoPage = () => {
                     <div>
                       <strong>Token:</strong> {lookupResult.tx?.tokenSymbol?.toUpperCase()}
                       {lookupResult.tx?.tokenAddress && (
-                        <span style={{ color: "#666", fontSize: 11 }}> (Token)</span>
+                        <span style={{ color: "#666", fontSize: 11 }}> (Token Transfer)</span>
                       )}
                     </div>
-                    <div><strong>Value:</strong> {lookupResult.tx?.valueDecimal?.toFixed(6)}</div>
+                    <div><strong>Quantity:</strong> {lookupResult.tx?.valueDecimal?.toFixed(6)} {lookupResult.tx?.tokenSymbol?.toUpperCase()}</div>
+                  </div>
+                  {/* Price and Value Summary Box */}
+                  <div style={{ marginTop: 12, padding: 10, background: "#c8e6c9", borderRadius: 6, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                     <div>
-                      <strong>USD Value:</strong> {
-                        lookupResult.priceUsd && lookupResult.priceUsd > 0 
-                          ? `$${lookupResult.valueUsd?.toFixed(2)}` 
-                          : <span style={{ color: "#f57c00" }}>⚠️ Enter price below</span>
-                      }
+                      <span style={{ fontSize: 11, color: "#1b5e20" }}>Price per {lookupResult.tx?.tokenSymbol?.toUpperCase()}</span>
+                      <div style={{ fontSize: 16, fontWeight: "bold", color: "#1b5e20" }}>
+                        {lookupResult.priceUsd && lookupResult.priceUsd > 0 
+                          ? `$${lookupResult.priceUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
+                          : <span style={{ color: "#f57c00" }}>⚠️ Enter below</span>
+                        }
+                      </div>
                     </div>
                     <div>
-                      <strong>Price/Token:</strong> {
-                        lookupResult.priceUsd && lookupResult.priceUsd > 0 
-                          ? `$${lookupResult.priceUsd.toFixed(2)}` 
-                          : <span style={{ color: "#f57c00" }}>Pending</span>
-                      }
+                      <span style={{ fontSize: 11, color: "#1b5e20" }}>Total Transaction Value</span>
+                      <div style={{ fontSize: 16, fontWeight: "bold", color: "#1b5e20" }}>
+                        {lookupResult.priceUsd && lookupResult.priceUsd > 0 
+                          ? `$${lookupResult.valueUsd?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
+                          : <span style={{ color: "#f57c00" }}>—</span>
+                        }
+                      </div>
                     </div>
                   </div>
                   {/* Show token address for non-native tokens */}
@@ -279,22 +286,34 @@ const CryptoPage = () => {
                 </div>
                 <div className="form-row">
                   <label>Token</label>
-                  <input value={form.tokenSymbol} onChange={(e) => setForm({ ...form, tokenSymbol: e.target.value.toUpperCase() })} />
+                  <input value={form.tokenSymbol} onChange={(e) => setForm({ ...form, tokenSymbol: e.target.value.toUpperCase() })} placeholder="ETH, BTC, SOL..." />
                 </div>
                 <div className="form-row">
-                  <label>Quantity</label>
-                  <input type="number" step="0.000001" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: parseFloat(e.target.value) || 0 })} />
+                  <label>Quantity <span style={{ fontWeight: "normal", color: "#666", fontSize: 12 }}>(tokens transferred)</span></label>
+                  <input type="number" step="0.000001" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: parseFloat(e.target.value) || 0 })} placeholder="0.000000" />
                 </div>
                 <div className="form-row">
-                  <label>Price (USD)</label>
-                  <input type="number" step="0.01" value={form.priceUsd} onChange={(e) => setForm({ ...form, priceUsd: parseFloat(e.target.value) || 0 })} />
+                  <label>Price per Token <span style={{ fontWeight: "normal", color: "#666", fontSize: 12 }}>(USD at time of tx)</span></label>
+                  <input type="number" step="0.01" value={form.priceUsd} onChange={(e) => setForm({ ...form, priceUsd: parseFloat(e.target.value) || 0 })} placeholder="e.g., 3000.00" />
+                </div>
+                {/* Calculated Total Value */}
+                <div className="form-row" style={{ background: "#f0f4f8", padding: "12px", borderRadius: 6, marginTop: 4 }}>
+                  <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: 0 }}>
+                    <span>💰 Total Value (USD)</span>
+                    <span style={{ fontSize: 18, fontWeight: "bold", color: "#2196F3" }}>
+                      ${(form.quantity * form.priceUsd).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </label>
+                  <span style={{ fontSize: 11, color: "#666" }}>
+                    {form.quantity.toFixed(6)} {form.tokenSymbol} × ${form.priceUsd.toFixed(2)} = ${(form.quantity * form.priceUsd).toFixed(2)}
+                  </span>
                 </div>
                 <div className="form-row">
-                  <label>Fee (USD)</label>
-                  <input type="number" step="0.01" value={form.feeUsd} onChange={(e) => setForm({ ...form, feeUsd: parseFloat(e.target.value) || 0 })} />
+                  <label>Network Fee <span style={{ fontWeight: "normal", color: "#666", fontSize: 12 }}>(USD)</span></label>
+                  <input type="number" step="0.01" value={form.feeUsd} onChange={(e) => setForm({ ...form, feeUsd: parseFloat(e.target.value) || 0 })} placeholder="0.00" />
                 </div>
                 <div className="form-row">
-                  <label>Description (optional)</label>
+                  <label>Description <span style={{ fontWeight: "normal", color: "#666", fontSize: 12 }}>(optional)</span></label>
                   <input placeholder="e.g., Payment for services" />
                 </div>
               </div>
