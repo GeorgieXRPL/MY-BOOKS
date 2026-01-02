@@ -3,9 +3,7 @@ import { IStore } from "../store.interface";
 import { logger } from "../../utils/logger";
 
 // Map common symbols to CoinGecko IDs
-// CoinGecko API requires the coin ID, not the symbol
 const SYMBOL_TO_COINGECKO_ID: Record<string, string> = {
-  // Major cryptocurrencies
   BTC: "bitcoin",
   ETH: "ethereum",
   XRP: "ripple",
@@ -20,93 +18,131 @@ const SYMBOL_TO_COINGECKO_ID: Record<string, string> = {
   LINK: "chainlink",
   UNI: "uniswap",
   AAVE: "aave",
-  
-  // Stablecoins
   USDC: "usd-coin",
   USDT: "tether",
   DAI: "dai",
   BUSD: "binance-usd",
-  
-  // Wrapped tokens
   WETH: "weth",
   WBTC: "wrapped-bitcoin",
-  
-  // Layer 2 / Other
   ARB: "arbitrum",
   OP: "optimism",
-  
-  // Popular meme coins & others
   DOGE: "dogecoin",
   SHIB: "shiba-inu",
   BONK: "bonk",
   JUP: "jupiter-exchange-solana",
   RAY: "raydium",
   ORCA: "orca",
-  
-  // Staked tokens
   MSOL: "msol",
   STSOL: "lido-staked-sol",
   STETH: "staked-ether"
 };
 
+// Map symbols to CoinCap IDs (backup API)
+const SYMBOL_TO_COINCAP_ID: Record<string, string> = {
+  BTC: "bitcoin",
+  ETH: "ethereum",
+  XRP: "xrp",
+  SOL: "solana",
+  BNB: "binance-coin",
+  AVAX: "avalanche",
+  MATIC: "polygon",
+  FTM: "fantom",
+  ATOM: "cosmos",
+  DOT: "polkadot",
+  ADA: "cardano",
+  LINK: "chainlink",
+  UNI: "uniswap",
+  AAVE: "aave",
+  USDC: "usd-coin",
+  USDT: "tether",
+  DAI: "multi-collateral-dai",
+  DOGE: "dogecoin",
+  SHIB: "shiba-inu"
+};
+
 export class PricingService {
   constructor(private store: IStore) {}
 
-  /**
-   * Convert token symbol to CoinGecko ID
-   */
-  private symbolToId(symbol: string): string {
+  private symbolToCoingeckoId(symbol: string): string {
     const normalized = symbol.toUpperCase();
     return SYMBOL_TO_COINGECKO_ID[normalized] || symbol.toLowerCase();
   }
 
-  async fetchPrice(symbol: string, currency = "USD"): Promise<number> {
-    const coinId = this.symbolToId(symbol);
-    
+  private symbolToCoinCapId(symbol: string): string {
+    const normalized = symbol.toUpperCase();
+    return SYMBOL_TO_COINCAP_ID[normalized] || symbol.toLowerCase();
+  }
+
+  /**
+   * Fetch price from CoinCap API (free, no rate limits)
+   */
+  private async fetchFromCoinCap(symbol: string): Promise<number | null> {
+    const coinId = this.symbolToCoinCapId(symbol);
     try {
-      const url = `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=${currency.toLowerCase()}`;
-      const res = await axios.get(url, { timeout: 8000 });
-      const price = res.data?.[coinId]?.[currency.toLowerCase()];
-      
-      if (price && typeof price === "number") {
-        logger.info(`Fetched price for ${symbol}`, { coinId, price, currency });
-        await Promise.resolve(this.store.addPriceTick({
-          symbol,
-          price,
-          currency,
-          timestamp: new Date().toISOString(),
-          source: "coingecko"
-        }));
+      const url = `https://api.coincap.io/v2/assets/${coinId}`;
+      const res = await axios.get(url, { timeout: 5000 });
+      const price = parseFloat(res.data?.data?.priceUsd);
+      if (price && !isNaN(price)) {
+        logger.info(`CoinCap price for ${symbol}`, { coinId, price });
         return price;
       }
-      
-      // If no price found with the ID, CoinGecko might not support it
-      logger.warn(`No price found for ${symbol} (coinId: ${coinId})`);
     } catch (err: any) {
-      logger.warn(`Failed to fetch price for ${symbol}`, { error: err.message });
+      logger.warn(`CoinCap failed for ${symbol}`, { error: err.message });
     }
+    return null;
+  }
+
+  /**
+   * Fetch price from CoinGecko API
+   */
+  private async fetchFromCoinGecko(symbol: string, currency: string): Promise<number | null> {
+    const coinId = this.symbolToCoingeckoId(symbol);
+    try {
+      const url = `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=${currency.toLowerCase()}`;
+      const res = await axios.get(url, { timeout: 5000 });
+      const price = res.data?.[coinId]?.[currency.toLowerCase()];
+      if (price && typeof price === "number") {
+        logger.info(`CoinGecko price for ${symbol}`, { coinId, price });
+        return price;
+      }
+    } catch (err: any) {
+      logger.warn(`CoinGecko failed for ${symbol}`, { error: err.message });
+    }
+    return null;
+  }
+
+  async fetchPrice(symbol: string, currency = "USD"): Promise<number> {
+    // Try CoinCap first (more reliable, no rate limits)
+    let price = await this.fetchFromCoinCap(symbol);
     
-    // Try to get cached price from database
+    // Fallback to CoinGecko
+    if (!price) {
+      price = await this.fetchFromCoinGecko(symbol, currency);
+    }
+
+    if (price && price > 0) {
+      await Promise.resolve(this.store.addPriceTick({
+        symbol,
+        price,
+        currency,
+        timestamp: new Date().toISOString(),
+        source: "api"
+      }));
+      return price;
+    }
+
+    // Try cached price
     try {
       const cached = await Promise.resolve(this.store.latestPrice?.(symbol, currency));
-      if (cached && cached.price) {
+      if (cached && cached.price && cached.price > 0) {
         logger.info(`Using cached price for ${symbol}`, { price: cached.price });
         return cached.price;
       }
     } catch {
-      // No cache available
+      // No cache
     }
-    
-    // Return 0 instead of 1 to indicate no price available
-    // The user can then input the price manually
-    logger.warn(`No price available for ${symbol}, returning 0`);
-    await Promise.resolve(this.store.addPriceTick({
-      symbol,
-      price: 0,
-      currency,
-      timestamp: new Date().toISOString(),
-      source: "unavailable"
-    }));
+
+    logger.warn(`No price available for ${symbol}`);
     return 0;
   }
 
