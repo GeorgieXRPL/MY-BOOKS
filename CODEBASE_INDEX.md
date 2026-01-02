@@ -24,7 +24,10 @@ This is a **full-stack accounting and financial reporting application** designed
 - Payroll management
 - Asset depreciation
 - OCR invoice scanning (images + **PDF support**)
-- Blockchain transaction lookup (EVM, XRPL, Solana, Bitcoin)
+- **Multi-chain blockchain lookup** (8 EVM networks + XRPL + Solana + Bitcoin)
+- **Token detection** (ERC-20, BEP-20, SPL, XRPL issued currencies)
+- **Real-time USD pricing** via CoinCap API
+- **TX hash auto-population** on Crypto page
 - Frontend navigation (no crashes)
 - Database connection to Supabase
 - CORS configuration
@@ -47,6 +50,8 @@ This is a **full-stack accounting and financial reporting application** designed
 | `JWT_SECRET` | Token signing | Yes |
 | `OPENAI_API_KEY` | OCR + AI Chat | For OCR/AI features |
 | `ALLOWED_ORIGINS` | CORS (frontend URL) | Yes |
+| `ALCHEMY_API_KEY` | Premium EVM RPC access | Optional (has free fallback) |
+| `HELIUS_API_KEY` | Enhanced Solana RPC | Optional (has free fallback) |
 
 ### 📋 Ready for Testing
 - Deploy to Render and verify all endpoints
@@ -135,10 +140,16 @@ This is a **full-stack accounting and financial reporting application** designed
 
 | Service            | File          | Description                                  |
 |--------------------|---------------|----------------------------------------------|
-| **PricingService** | `pricing.ts`  | Token/FX price feeds (CoinGecko, Coinbase)   |
+| **PricingService** | `pricing.ts`  | Token/FX price feeds (CoinCap + CoinGecko)   |
 | **WalletIngestor** | `wallet.ts`   | On-chain wallet transaction ingestion        |
 | **CexIngestor**    | `cex.ts`      | CEX (Coinbase, Binance, etc.) data import    |
 | **BankIngestor**   | `bank.ts`     | Bank statement CSV/API import                |
+
+**Pricing Service:**
+- Primary API: **CoinCap** (no rate limits on free tier)
+- Fallback API: **CoinGecko** (rate-limited)
+- Includes symbol-to-ID mapping for 30+ major tokens
+- Caches prices in database for offline access
 
 ### Blockchain Auto-Ingestion (`/core/blockchain`)
 
@@ -146,13 +157,31 @@ This is a **full-stack accounting and financial reporting application** designed
 |----------------------|-------------------|------------------------------------------------|
 | **AutoIngestService**| `autoIngest.ts`   | Orchestrates TX lookup, pricing, journal creation |
 | **Chain Detector**   | `detector.ts`     | Auto-detect blockchain from TX hash format     |
-| **EVM Fetcher**      | `fetchers/evm.ts` | Ethereum, Polygon, Arbitrum, Base via Alchemy  |
-| **XRPL Fetcher**     | `fetchers/xrpl.ts`| XRP Ledger transaction fetching                |
-| **Solana Fetcher**   | `fetchers/solana.ts` | Solana via Helius or public RPC             |
+| **EVM Fetcher**      | `fetchers/evm.ts` | Multi-chain EVM with token detection (see below) |
+| **XRPL Fetcher**     | `fetchers/xrpl.ts`| XRP Ledger with issued currency support        |
+| **Solana Fetcher**   | `fetchers/solana.ts` | Solana via Helius or public RPC with SPL tokens |
 | **Bitcoin Fetcher**  | `fetchers/bitcoin.ts` | Bitcoin via Blockstream/Mempool.space       |
 
+**Supported EVM Networks:**
+
+| Network | Chain ID | Native Token | RPC Source |
+|---------|----------|--------------|------------|
+| Ethereum | 1 | ETH | Alchemy or LlamaRPC |
+| BNB Smart Chain | 56 | BNB | PublicNode |
+| Polygon | 137 | MATIC | Alchemy or LlamaRPC |
+| Arbitrum | 42161 | ETH | Alchemy or LlamaRPC |
+| Base | 8453 | ETH | Alchemy or LlamaRPC |
+| Optimism | 10 | ETH | Alchemy or LlamaRPC |
+| Avalanche | 43114 | AVAX | Avax Network RPC |
+| Fantom | 250 | FTM | FTM Tools RPC |
+
+**Token Support:**
+- **EVM Chains:** Auto-detects ERC-20/BEP-20 token transfers from logs, fetches token symbol/decimals
+- **XRPL:** Supports issued currencies, decodes hex-encoded currency codes, includes issuer address
+- **Solana:** Parses SPL token transfers, includes lookup table for common tokens (USDC, USDT, BONK, etc.)
+
 **API Endpoints:**
-- `POST /ingest/blockchain/lookup` - Preview transaction details
+- `POST /ingest/blockchain/lookup` - Preview transaction details (auto-populates crypto form)
 - `POST /ingest/blockchain/detect` - Detect chain from hash format
 - `POST /ingest/blockchain/ingest` - Fetch TX and create journal entry
 

@@ -291,6 +291,50 @@ interface IStore {
 
 ---
 
+### Feedback 4: Blockchain TX Lookup Issues
+
+**Status:** ✅ Fixed
+
+**Problems Reported:**
+1. "Transaction not found on any EVM network" for valid BSC/BNB transactions
+2. USD price showing as $1 instead of actual price (~$3000 for ETH)
+3. USD value calculated incorrectly ($0.02 instead of $45)
+
+**Root Causes:**
+1. Only 4 EVM networks were supported (missing BSC, Avalanche, Optimism, Fantom)
+2. CoinGecko API was being called with symbol (`ETH`) instead of coin ID (`ethereum`)
+3. CoinGecko rate limits the free tier heavily
+
+**Solutions Applied:**
+
+**A. Added 4 More EVM Networks:**
+| Network | Chain ID | Native Token |
+|---------|----------|--------------|
+| BSC | 56 | BNB |
+| Optimism | 10 | ETH |
+| Avalanche | 43114 | AVAX |
+| Fantom | 250 | FTM |
+
+**B. Added Token Detection:**
+- ERC-20/BEP-20 detection from transaction logs
+- Fetches token symbol and decimals from smart contracts
+- XRPL issued currency support with issuer info
+- SPL token parsing with known token lookup
+
+**C. Fixed Pricing Service:**
+- Added CoinCap as primary API (no rate limits)
+- Added symbol-to-ID mapping for 30+ tokens
+- Falls back to CoinGecko if CoinCap fails
+- Caches prices for offline access
+
+**D. Improved Frontend UX:**
+- Shows network name badge (e.g., "Ethereum", "BNB Smart Chain")
+- Displays token contract address for non-native tokens
+- Shows warning when price lookup fails
+- Prompts user to enter price manually if needed
+
+---
+
 ## Recommendations
 
 ### Immediate ✅ DONE
